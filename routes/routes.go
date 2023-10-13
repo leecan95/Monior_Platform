@@ -18,7 +18,9 @@ func SetupRouter() *gin.Engine {
 	config.AddAllowHeaders("authorization")
 	route.Use(cors.New(config))
 
-	route.GET("snmp/get", middlewares.ValidateOIDMiddleware, controllers.GetOIDController)
+	route.GET("snmp/oid/get", middlewares.ValidateOIDMiddleware, controllers.GetOIDController)
+	route.GET("snmp/server/get", middlewares.ValidateOidServerMiddleware, controllers.GetOidWithServerController)
+	route.GET("users/tps", controllers.GetUsersTPSController)
 	// Endpoint to get metrics
 	// Middleware để ghi log vào metric
 	route.Use(func(c *gin.Context) {

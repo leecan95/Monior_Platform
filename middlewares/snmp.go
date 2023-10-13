@@ -13,3 +13,23 @@ func ValidateOIDMiddleware(c *gin.Context) {
 	}
 	c.Next()
 }
+
+func ValidateOidServerMiddleware(c *gin.Context) {
+	oid := c.Query("oid")
+	if oid == "" {
+		c.JSON(400, gin.H{
+			"message": "oid parameters is required",
+		})
+		c.Abort()
+		return
+	}
+	server := c.Query("server")
+	if server == "" {
+		c.JSON(400, gin.H{
+			"message": "server parameters is required",
+		})
+		c.Abort()
+		return
+	}
+	c.Next()
+}

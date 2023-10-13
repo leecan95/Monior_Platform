@@ -8,7 +8,7 @@ import (
 )
 
 func GetOIDController(c *gin.Context) {
-	var request validations.GetMethod
+	var request validations.GetOidSnmp
 	if requestErr := c.ShouldBind(&request); requestErr != nil {
 		errRes := strings.Split(requestErr.Error(), ": ")
 		services.ValidationError(c, "These fields are required!", errRes)
@@ -21,4 +21,22 @@ func GetOIDController(c *gin.Context) {
 
 	c.JSON(200, values)
 
+}
+
+func GetAllCpuUsageController(c *gin.Context) {
+	values := services.GetAllCpuUsage(c)
+	c.JSON(200, values)
+}
+
+func GetOidWithServerController(c *gin.Context) {
+	var request validations.GetEachOidWithServer
+	if requestErr := c.ShouldBind(&request); requestErr != nil {
+		errRes := strings.Split(requestErr.Error(), ": ")
+		services.ValidationError(c, "These fields are required!", errRes)
+		return
+	}
+	oid := c.Query("oid")
+	server := c.Query("server")
+	values := services.GetDataSNMP(server, oid)
+	c.JSON(200, values)
 }

@@ -14,4 +14,11 @@ const ssCpuSystem = "1.3.6.1.4.1.2021.11.10.0"
 const dskTotal = "iso.3.6.1.4.1.2021.9.1.6.3"
 
 const Target = "localhost"
+
+const Server246 = "172.21.5.246"
+const Server245 = "172.21.5.245"
+const Server244 = "172.21.5.244"
+const Server250 = "172.21.5.250"
+const Server251 = "172.21.5.251"
+const Server252 = "172.21.5.252"
 const SNMP_Port = 161
