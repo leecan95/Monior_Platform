@@ -7,6 +7,7 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"net/http"
 )
 
 func SetupRouter() *gin.Engine {
@@ -18,6 +19,19 @@ func SetupRouter() *gin.Engine {
 	config.AddAllowHeaders("authorization")
 	route.Use(cors.New(config))
 
+	route.Use(func(c *gin.Context) {
+		c.Next()
+		if len(c.Errors) > 0 {
+			for _, err := range c.Errors {
+				if err.IsType(gin.ErrorTypeBind) {
+					// Trả về lỗi 500
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
+					return
+				}
+			}
+		}
+	})
+	route.Use(middlewares.ErrorHandler())
 	route.GET("snmp/oid/get", middlewares.ValidateOIDMiddleware, controllers.GetOIDController)
 	route.GET("snmp/server/get", middlewares.ValidateOidServerMiddleware, controllers.GetOidWithServerController)
 	route.GET("users/tps", controllers.GetUsersTPSController)
