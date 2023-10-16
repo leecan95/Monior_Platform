@@ -42,5 +42,4 @@ func GetOIDInt(oid string) *big.Int {
 		}
 	}
 	return nil
-	return nil
 }

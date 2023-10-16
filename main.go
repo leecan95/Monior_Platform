@@ -6,7 +6,7 @@ func main() {
 
 	r := routes.SetupRouter()
 
-	err := r.Run("localhost:8080")
+	err := r.Run("localhost:8933")
 	if err != nil {
 		panic(err)
 	}

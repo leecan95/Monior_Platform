@@ -37,6 +37,6 @@ func GetOidWithServerController(c *gin.Context) {
 	}
 	oid := c.Query("oid")
 	server := c.Query("server")
-	values := services.GetDataSNMP(server, oid)
+	values := services.GetDataSNMP(c, server, oid)
 	c.JSON(200, values)
 }

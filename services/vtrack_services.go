@@ -12,7 +12,7 @@ func GetUsersTPS(c *gin.Context) interface{} {
 	params := "?query = sum(irate(users_api_request_count[30s]))"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -24,7 +24,7 @@ func GetOrganizationTPS(c *gin.Context) interface{} {
 	params := "?query = round(sum(irate(organizations_api_request_count[30s])))"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -36,7 +36,7 @@ func GetAdapterTPS(c *gin.Context) interface{} {
 	params := "?query = round(sum(irate(vtadapter_api_request_count{method=\"HandleKafka\"}[30s])) by (method), 0.001)"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -48,7 +48,7 @@ func GetRoleTPS(c *gin.Context) interface{} {
 	params := "?query"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -60,7 +60,7 @@ func GetDeviceTPS(c *gin.Context) interface{} {
 	params := "?query = round(sum(irate(vtdevices_api_request_count[30s])))"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -72,7 +72,7 @@ func GetDataUsageStreaming(c *gin.Context) interface{} {
 	params := "?query = node_network_receive_bytes_total{device=\"br-b6703b71de00\"}"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -84,7 +84,7 @@ func GetUrlState(c *gin.Context) interface{} {
 	params := "?query = probe_success{}"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -96,7 +96,7 @@ func GetPodState(c *gin.Context) interface{} {
 	params := "?query = sum(kube_pod_status_phase{})"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -108,7 +108,7 @@ func GetKafkaPartitionOnline(c *gin.Context) interface{} {
 	params := "?query = sum(kafka_server_replicamanager_partitioncount{job=~\"$job\"})"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -120,7 +120,7 @@ func GetKafkaBytein(c *gin.Context) interface{} {
 	params := "?query = sum (rate(kafka_server_brokertopicmetrics_bytesin_total{}[1m]))by(instance)"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -132,7 +132,7 @@ func GetKafkaByteout(c *gin.Context) interface{} {
 	params := "?query = sum (rate(kafka_server_brokertopicmetrics_bytesout_total{}[1m]))by(instance)"
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
@@ -144,7 +144,7 @@ func GetPrometheus(c *gin.Context, query string) interface{} {
 	params := "?query=" + query
 	resp, err := http.Get(url + params)
 	if err != nil {
-		log.Fatalf("error in services %s", err)
+		log.Printf("error in services %s", err)
 		c.JSON(400, err)
 	}
 
