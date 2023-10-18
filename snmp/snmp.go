@@ -15,8 +15,7 @@ var Manager = &gosnmp.GoSNMP{
 	Port:      config.SNMP_Port,               // Port mặc định của SNMP
 	Version:   gosnmp.Version2c,               // Sử dụng SNMP version 2c
 	Community: "public",                       // Community string
-	Timeout:   time.Duration(2) * time.Second, // Thời gian chờ tối đa
-	MaxOids:   100,                            // Số lượng OID tối đa được yêu cầu
+	Timeout:   time.Duration(5) * time.Second, // Thời gian chờ tối đa
 }
 
 func GetOIDInt(oid string) *big.Int {

@@ -16,6 +16,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o /Monitor_Platform
 # the application is going to listen on by default.
 # https://docs.docker.com/engine/reference/builder/#expose
 EXPOSE 8933
+EXPOSE 161
 
 # Run
 CMD [ "/Monitor_Platform" ]

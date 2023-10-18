@@ -32,9 +32,22 @@ func SetupRouter() *gin.Engine {
 		}
 	})
 	route.Use(middlewares.ErrorHandler())
-	route.GET("snmp/oid/get", middlewares.ValidateOIDMiddleware, controllers.GetOIDController)
-	route.GET("snmp/server/get", middlewares.ValidateOidServerMiddleware, controllers.GetOidWithServerController)
-	route.GET("users/tps", controllers.GetUsersTPSController)
+	route.GET("ems/snmp/oid/get", middlewares.ValidateOIDMiddleware, controllers.GetOIDController)
+	route.GET("ems/snmp/server/get", middlewares.ValidateOidServerMiddleware, controllers.GetOidWithServerController)
+	route.GET("ems/snmp/memory/total", controllers.GetAllMemController)
+	route.GET("ems/snmp/memory/available", controllers.GetAvailMemController)
+	route.GET("ems/snmp/memory/used", controllers.GetUsedMemController)
+	route.GET("ems/snmp/cpu/usage", controllers.GetCpuUsageController)
+	route.GET("ems/users/tps", controllers.GetUsersTPSController)
+	route.GET("ems/organizations/tps", controllers.GetOrganizationsTPSController)
+	route.GET("ems/adapters/tps", controllers.GetAdapterTPSController)
+	route.GET("ems/roles/tps", controllers.GetRoleTPSController)
+	route.GET("ems/devices/tps", controllers.GetDeviceTPSController)
+	route.GET("ems/video/stream", controllers.GetDataUsageStreamingController)
+	route.GET("ems/url/state", controllers.GetUrlStateController)
+	route.GET("ems/pod/state", controllers.GetPodStateController)
+	route.GET("ems/prometheus", middlewares.ValidateQueryMiddleware, controllers.GetPrometheusController)
+
 	// Endpoint to get metrics
 	// Middleware để ghi log vào metric
 	route.Use(func(c *gin.Context) {

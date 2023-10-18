@@ -9,42 +9,74 @@ import (
 
 func GetUsersTPSController(c *gin.Context) {
 	values := services.GetUsersTPS(c)
-	c.JSON(200, values)
+
+	if values != "" {
+		reponse := Response{
+			Value: values,
+		}
+		c.JSON(200, reponse)
+	}
 }
 
 func GetOrganizationsTPSController(c *gin.Context) {
 	values := services.GetOrganizationTPS(c)
-	c.JSON(200, values)
+	if values != "" {
+		reponse := Response{
+			Value: values,
+		}
+		c.JSON(200, reponse)
+	}
 }
 
 func GetAdapterTPSController(c *gin.Context) {
 	values := services.GetAdapterTPS(c)
-	c.JSON(200, values)
+	if values != "" {
+		reponse := Response{
+			Value: values,
+		}
+		c.JSON(200, reponse)
+	}
 }
 
 func GetRoleTPSController(c *gin.Context) {
 	values := services.GetRoleTPS(c)
-	c.JSON(200, values)
+	if values != "" {
+		reponse := Response{
+			Value: values,
+		}
+		c.JSON(200, reponse)
+	}
 }
 
 func GetDeviceTPSController(c *gin.Context) {
 	values := services.GetDeviceTPS(c)
-	c.JSON(200, values)
+	if values != "" {
+		reponse := Response{
+			Value: values,
+		}
+		c.JSON(200, reponse)
+	}
 }
 
 func GetDataUsageStreamingController(c *gin.Context) {
 	values := services.GetDataUsageStreaming(c)
-	c.JSON(200, values)
+	if values != "" {
+		c.JSON(200, values)
+	}
 }
 
 func GetUrlStateController(c *gin.Context) {
 	values := services.GetUrlState(c)
-	c.JSON(200, values)
+	if values != "" {
+		c.JSON(200, values)
+	}
 }
 
 func GetPodStateController(c *gin.Context) {
 	values := services.GetPodState(c)
-	c.JSON(200, values)
+	if values != "" {
+		c.JSON(200, values)
+	}
 }
 
 func GetPrometheusController(c *gin.Context) {
@@ -57,5 +89,8 @@ func GetPrometheusController(c *gin.Context) {
 	query := c.Query("query")
 
 	values := services.GetPrometheus(c, query)
-	c.JSON(200, values)
+
+	if values != "" {
+		c.JSON(200, values)
+	}
 }
