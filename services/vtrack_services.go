@@ -17,29 +17,26 @@ func GetUsersTPS(c *gin.Context) interface{} {
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	fmt.Printf("User reponse : %s", body)
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	result := response["data"].(map[string]interface{})["result"].([]interface{})
 	if result == nil {
 		log.Printf("Wrong data for get number")
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	value := result[0].(map[string]interface{})["value"].([]interface{})
 	number := value[1].(string)
@@ -53,7 +50,7 @@ func GetOrganizationTPS(c *gin.Context) interface{} {
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
@@ -61,21 +58,18 @@ func GetOrganizationTPS(c *gin.Context) interface{} {
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	result := response["data"].(map[string]interface{})["result"].([]interface{})
 	if result == nil {
 		log.Printf("Wrong data for get number")
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	value := result[0].(map[string]interface{})["value"].([]interface{})
 	number := value[1].(string)
@@ -89,28 +83,25 @@ func GetAdapterTPS(c *gin.Context) interface{} {
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	result := response["data"].(map[string]interface{})["result"].([]interface{})
 	if result == nil {
 		log.Printf("Wrong data for get number")
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	value := result[0].(map[string]interface{})["value"].([]interface{})
 	number := value[1].(string)
@@ -124,28 +115,25 @@ func GetRoleTPS(c *gin.Context) interface{} {
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	result := response["data"].(map[string]interface{})["result"].([]interface{})
 	if result == nil {
 		log.Printf("Wrong data for get number")
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	value := result[0].(map[string]interface{})["value"].([]interface{})
 	number := value[1].(string)
@@ -159,28 +147,25 @@ func GetDeviceTPS(c *gin.Context) interface{} {
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	result := response["data"].(map[string]interface{})["result"].([]interface{})
 	if result == nil {
 		log.Printf("Wrong data for get number")
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 	value := result[0].(map[string]interface{})["value"].([]interface{})
 	number := value[1].(string)
@@ -194,53 +179,102 @@ func GetDataUsageStreaming(c *gin.Context) interface{} {
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	return response
 }
 
 func GetUrlState(c *gin.Context) interface{} {
-	var response map[string]interface{}
+	var response KafkaReponse
 	url := config.PrometheusUrl
-	params := "?query=probe_success{}"
+	var sum []UrlData
+	params := "?query=probe_success{system=~\"innoway\"}"
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
-	return response
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := UrlData{
+				Url:   result.Metric.Instance,
+				Value: "Up",
+			}
+			sum = append(sum, data)
+		} else {
+			data := UrlData{
+				Url:   result.Metric.Instance,
+				Value: "Down",
+			}
+			sum = append(sum, data)
+		}
+	}
+
+	return sum
+}
+
+func GetHttpStatusCode(c *gin.Context) interface{} {
+	var response KafkaReponse
+	url := config.PrometheusUrl
+	var sum []UrlData
+	params := "?query=probe_http_status_code{system=~\"innoway\"}"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := UrlData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
 }
 
 func GetPodState(c *gin.Context) interface{} {
@@ -250,109 +284,590 @@ func GetPodState(c *gin.Context) interface{} {
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	return response
 }
 
 func GetKafkaPartitionOnline(c *gin.Context) interface{} {
-	var response map[string]interface{}
+	var response KafkaReponse
 	url := config.PrometheusUrl
-	params := "?query=sum(kafka_server_replicamanager_partitioncount{job=~\"$job\"})"
+	params := "?query=sum(kafka_server_replicamanager_partitioncount{})"
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
-	return response
+	return response.Data.Result[0].Value[1]
 }
 
-func GetKafkaBytein(c *gin.Context) interface{} {
-	var response map[string]interface{}
+func GetKafkaBytein(c *gin.Context) KafkaData {
+	var response KafkaReponse
 	url := config.PrometheusUrl
 	params := "?query=sum(rate(kafka_server_brokertopicmetrics_bytesin_total{}[1m]))by(instance)"
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
-
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
-	return response
+	return response.Data
 }
 
-func GetKafkaByteout(c *gin.Context) interface{} {
-	var response map[string]interface{}
+func GetKafkaByteout(c *gin.Context) KafkaData {
+	var response KafkaReponse
 	url := config.PrometheusUrl
 	params := "?query=sum(rate(kafka_server_brokertopicmetrics_bytesout_total{}[1m]))by(instance)"
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
-		return ""
+		c.Error(err)
 	}
 
-	return response
+	return response.Data
+}
+
+func GetPodPend(c *gin.Context) []PodData {
+	var response PodReponse
+	var sum []PodData
+	url := config.PrometheusUrl
+	params := "?query=kube_pod_status_phase{pod=~\"^attributes.*\",phase=\"Pending\"}"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+
+	params = "?query=kube_pod_status_phase{pod=~\"^roles.*\",phase=\"Pending\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^organizations.*\",phase=\"Pending\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^users.*\",phase=\"Pending\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^vtracking.*\",phase=\"Pending\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+
+	return sum
+}
+
+func GetPodUp(c *gin.Context) []PodData {
+	var response PodReponse
+	var sum []PodData
+	url := config.PrometheusUrl
+	params := "?query=kube_pod_status_phase{pod=~\"^attributes.*\",phase=\"Running\"}"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+
+	params = "?query=kube_pod_status_phase{pod=~\"^roles.*\",phase=\"Running\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^organizations.*\",phase=\"Running\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^users.*\",phase=\"Running\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^vtracking.*\",phase=\"Running\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+
+	return sum
+}
+
+func GetKpiVtrack(c *gin.Context) []KpiData {
+	var response PodReponse
+	var sum []KpiData
+	url := config.PrometheusUrl
+	params := "?query=sum(users_api_request_error_count)"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	evalue, eok := response.Data.Result[0].Value[1].(string)
+
+	params = "?query=sum(users_api_request_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	value, ok := response.Data.Result[0].Value[1].(string)
+	if ok && eok {
+		data := KpiData{
+			Pod:   "user",
+			Req:   value,
+			Error: evalue,
+		}
+		sum = append(sum, data)
+	}
+
+	params = "?query=sum(vtdevices_api_request_error_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	evalue, eok = response.Data.Result[0].Value[1].(string)
+
+	params = "?query=sum(vtdevices_api_request_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	value, ok = response.Data.Result[0].Value[1].(string)
+	if ok && eok {
+		data := KpiData{
+			Pod:   "device",
+			Req:   value,
+			Error: evalue,
+		}
+		sum = append(sum, data)
+	}
+	params = "?query=sum(organizations_api_request_error_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	evalue, eok = response.Data.Result[0].Value[1].(string)
+
+	params = "?query=sum(organizations_api_request_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	value, ok = response.Data.Result[0].Value[1].(string)
+	if ok && eok {
+		data := KpiData{
+			Pod:   "organization",
+			Req:   value,
+			Error: evalue,
+		}
+		sum = append(sum, data)
+	}
+
+	params = "?query=sum(attributes_api_request_error_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	evalue, eok = response.Data.Result[0].Value[1].(string)
+
+	params = "?query=sum(attributes_api_request_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	value, ok = response.Data.Result[0].Value[1].(string)
+	if ok && eok {
+		data := KpiData{
+			Pod:   "attribute",
+			Req:   value,
+			Error: evalue,
+		}
+		sum = append(sum, data)
+	}
+
+	return sum
 }
 
 func GetPrometheus(c *gin.Context, query string) interface{} {
@@ -362,24 +877,158 @@ func GetPrometheus(c *gin.Context, query string) interface{} {
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
-		c.JSON(400, err)
+		c.Error(err)
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("error reading response body: %s", err)
-		c.JSON(500, err)
+		c.Error(err)
 		return ""
 	}
 
 	err = json.Unmarshal(body, &response)
 	if err != nil {
 		log.Printf("error unmarshaling JSON: %s", err)
-		c.JSON(500, err)
+		c.Error(err)
 		return ""
 	}
 
 	return response
 
+}
+
+func GetMqttRequest(c *gin.Context) interface{} {
+	var response KafkaReponse
+	url := config.PrometheusUrl
+	params := "?query=sum(rate(mqtt_publish_received[1m]))"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	return response.Data.Result[0].Value[1]
+}
+
+func GetMqttClientConnected(c *gin.Context) interface{} {
+	var response KafkaReponse
+	url := config.PrometheusUrl
+	var sum []UrlData
+	params := "?query=(socket_open-socket_close)"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := UrlData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func RedisMemUsed(c *gin.Context) interface{} {
+	var response KafkaReponse
+	url := config.PrometheusUrl
+	var sum []UrlData
+	params := "?query=redis_memory_used_bytes"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := UrlData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func RedisCmdPS(c *gin.Context) interface{} {
+	var response CmdReponse
+	url := config.PrometheusUrl
+	var sum []CmdData
+	params := "?query=sum(rate(redis_commands_total{}[1m]))by(cmd)"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := CmdData{
+				Cmd:   result.Metric.Cmd,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
 }

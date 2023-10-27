@@ -4,14 +4,14 @@ const MemTotalReal = "1.3.6.1.4.1.2021.4.5.0"
 const MemAvailReal = "1.3.6.1.4.1.2021.4.6.0"
 
 const CpuUsageUserPercent = "1.3.6.1.4.1.2021.11.9.0"
-const SsCpuRawUser = "1.3.6.1.4.1.2021.11.50"
-const SsCpuRawNice = "1.3.6.1.4.1.2021.11.51"
-const SsCpuRawSystem = "1.3.6.1.4.1.2021.11.52"
-const SsCpuRawIdle = "1.3.6.1.4.1.2021.11.53"
-const SsCpuRawWait = "1.3.6.1.4.1.2021.11.54"
-const SsCpuRawKernel = "1.3.6.1.4.1.2021.11.55"
-const SsCpuRawInterrupt = "1.3.6.1.4.1.2021.11.56"
-const SsCpuRawSoftIRQ = " 1.3.6.1.4.1.2021.11.61"
+const SsCpuRawUser = "1.3.6.1.4.1.2021.11.50.0"
+const SsCpuRawNice = "1.3.6.1.4.1.2021.11.51.0"
+const SsCpuRawSystem = "1.3.6.1.4.1.2021.11.52.0"
+const SsCpuRawIdle = "1.3.6.1.4.1.2021.11.53.0"
+const SsCpuRawWait = "1.3.6.1.4.1.2021.11.54.0"
+const SsCpuRawKernel = "1.3.6.1.4.1.2021.11.55.0"
+const SsCpuRawInterrupt = "1.3.6.1.4.1.2021.11.56.0"
+const SsCpuRawSoftIRQ = "1.3.6.1.4.1.2021.11.61.0"
 
 // The total amount of memory free or available for use on
 // this host.  This value typically covers both real memory
@@ -21,7 +21,8 @@ const memBuffer = "1.3.6.1.4.1.2021.4.14.0"
 const memCached = "1.3.6.1.4.1.2021.4.15.0"
 const memSysAvail = "1.3.6.1.4.1.2021.4.27.0"
 const ssCpuSystem = "1.3.6.1.4.1.2021.11.10.0"
-const dskTotal = "iso.3.6.1.4.1.2021.9.1.6.3"
+const DskTotal = "1.3.6.1.4.1.2021.9.1.6.3"
+const DskAvail = "1.3.6.1.4.1.2021.9.1.7.3"
 
 const Target = "localhost"
 

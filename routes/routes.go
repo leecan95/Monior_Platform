@@ -29,14 +29,21 @@ func SetupRouter() *gin.Engine {
 					return
 				}
 			}
+			// Lấy lỗi đầu tiên trong danh sách lỗi
+			err := c.Errors[0].Err
+			// Trả về lỗi
+			c.AbortWithError(http.StatusInternalServerError, err)
 		}
 	})
+
 	route.Use(middlewares.ErrorHandler())
 	route.GET("ems/snmp/oid/get", middlewares.ValidateOIDMiddleware, controllers.GetOIDController)
 	route.GET("ems/snmp/server/get", middlewares.ValidateOidServerMiddleware, controllers.GetOidWithServerController)
 	route.GET("ems/snmp/memory/total", controllers.GetAllMemController)
 	route.GET("ems/snmp/memory/available", controllers.GetAvailMemController)
 	route.GET("ems/snmp/memory/used", controllers.GetUsedMemController)
+	route.GET("ems/snmp/memory/all", controllers.GetMemController)
+	route.GET("ems/snmp/disk/all", controllers.GetDiskController)
 	route.GET("ems/snmp/cpu/usage", controllers.GetCpuUsageController)
 	route.GET("ems/users/tps", controllers.GetUsersTPSController)
 	route.GET("ems/organizations/tps", controllers.GetOrganizationsTPSController)
@@ -45,7 +52,13 @@ func SetupRouter() *gin.Engine {
 	route.GET("ems/devices/tps", controllers.GetDeviceTPSController)
 	route.GET("ems/video/stream", controllers.GetDataUsageStreamingController)
 	route.GET("ems/url/state", controllers.GetUrlStateController)
+	route.GET("ems/http/status/code", controllers.GetHttpStatusController)
 	route.GET("ems/pod/state", controllers.GetPodStateController)
+	route.GET("ems/kafka/queue", controllers.GetKafkaQueueController)
+	route.GET("ems/kafka/partition", controllers.GetKafkaPartitionController)
+	route.GET("ems/pod/state/all", controllers.GetPodupController)
+	route.GET("ems/pod/pending/all", controllers.GetPodpendController)
+	route.GET("ems/kpi/vtrack", controllers.GetKpiVtrackController)
 	route.GET("ems/prometheus", middlewares.ValidateQueryMiddleware, controllers.GetPrometheusController)
 
 	// Endpoint to get metrics
