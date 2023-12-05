@@ -1,22 +1,18 @@
-# syntax=docker/dockerfile:1
+FROM golang:1.21.1 as builder
 
-FROM golang:1.21.1
-
-# Set destination for COPY
 WORKDIR /app
 
-COPY . .
+COPY go.* ./
 RUN go mod download
 
-# Build
-RUN CGO_ENABLED=0 GOOS=linux go build -o /Monitor_Platform
+COPY . ./
 
-# To bind to a TCP port, runtime parameters must be supplied to the docker command.
-# But we can (optionally) document in the Dockerfile what ports
-# the application is going to listen on by default.
-# https://docs.docker.com/engine/reference/builder/#expose
+RUN CGO_ENABLED=0 GOOS=linux go build -v -o main ./
+
+FROM scratch
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /app/main /app/main
+WORKDIR /app
 EXPOSE 8933
 EXPOSE 161
-
-# Run
-CMD [ "/Monitor_Platform" ]
+CMD ["./main"]

@@ -17,6 +17,20 @@ type KafkaReponse struct {
 		} `json:"result"`
 	} `json:"data"`
 }
+type Systemreponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		ResultType string `json:"resultType"`
+		Result     []struct {
+			Metric struct {
+				Instance string `json:"instance"`
+				Device   string `json:"device"`
+				Job      string `json:"job"`
+			} `json:"metric"`
+			Value []interface{} `json:"value"`
+		} `json:"result"`
+	} `json:"data"`
+}
 
 type CmdReponse struct {
 	Status string `json:"status"`
@@ -47,7 +61,8 @@ type PodReponse struct {
 		ResultType string `json:"resultType"`
 		Result     []struct {
 			Metric struct {
-				Pod string `json:"pod"`
+				Pod    string `json:"pod"`
+				Method string `json:"method"`
 			} `json:"metric"`
 			Value []interface{} `json:"value"`
 		} `json:"result"`
@@ -67,6 +82,12 @@ type UrlData struct {
 type CmdData struct {
 	Cmd   string `json:"cmd"`
 	Value string `json:"value"`
+}
+
+type SysData struct {
+	Device string `json:"device"`
+	Url    string `json:"url"`
+	Value  string `json:"value"`
 }
 
 type KpiData struct {

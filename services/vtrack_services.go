@@ -666,7 +666,276 @@ func GetPodUp(c *gin.Context) []PodData {
 			sum = append(sum, data)
 		}
 	}
+	params = "?query=kube_pod_status_phase{pod=~\"^attributes.*\",phase=\"Pending\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
 
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: "2",
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^roles.*\",phase=\"Pending\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: "2",
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^organizations.*\",phase=\"Pending\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: "2",
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^users.*\",phase=\"Pending\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: "2",
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^vtracking.*\",phase=\"Pending\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: "2",
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^attributes.*\",phase=\"Failed\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: "0",
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^roles.*\",phase=\"Failed\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: "0",
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^organizations.*\",phase=\"Failed\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: "0",
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^users.*\",phase=\"Failed\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: "0",
+			}
+			sum = append(sum, data)
+		}
+	}
+	params = "?query=kube_pod_status_phase{pod=~\"^vtracking.*\",phase=\"Failed\"}"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := PodData{
+				Pod:   result.Metric.Pod,
+				Value: "0",
+			}
+			sum = append(sum, data)
+		}
+	}
 	return sum
 }
 
@@ -1025,6 +1294,397 @@ func RedisCmdPS(c *gin.Context) interface{} {
 		if value, ok := result.Value[1].(string); ok {
 			data := CmdData{
 				Cmd:   result.Metric.Cmd,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func GetInodeUsage(c *gin.Context) interface{} {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=node_filesystem_avail_bytes{}"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := SysData{
+				Url:    result.Metric.Instance,
+				Device: result.Metric.Device,
+				Value:  value,
+			}
+			sum = append(sum, data)
+		}
+	}
+
+	return sum
+}
+
+func GetReadOnlyFile(c *gin.Context) interface{} {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=node_filesystem_readonly{}"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := SysData{
+				Url:    result.Metric.Instance,
+				Device: result.Metric.Device,
+				Value:  value,
+			}
+			sum = append(sum, data)
+		}
+	}
+
+	return sum
+}
+
+func GetCpuUsage(c *gin.Context) interface{} {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=100-ssCpuIdle{}"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && result.Metric.Job == "snmp kemp_loadmaster" {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func GetMemTotal(c *gin.Context) []SysData {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=memTotalReal"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && result.Metric.Job == "snmp kemp_loadmaster" {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func GetMemAvail(c *gin.Context) []SysData {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=memAvailReal"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && result.Metric.Job == "snmp kemp_loadmaster" {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func GetMemCache(c *gin.Context) interface{} {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=memCached"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && result.Metric.Job == "snmp kemp_loadmaster" {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func GetMemBuffer(c *gin.Context) interface{} {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=memBuffer"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && result.Metric.Job == "snmp kemp_loadmaster" {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func GetIoReceive(c *gin.Context) []SysData {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=ssIOReceive"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func GetIoSent(c *gin.Context) []SysData {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=ssIOSent"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func DiskTotal(c *gin.Context) []SysData {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=hrStorageSize{hrStorageDescr=\"/\"}"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func DiskUsed(c *gin.Context) []SysData {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=hrStorageUsed{hrStorageDescr=\"/\"}"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := SysData{
+				Url:   result.Metric.Instance,
 				Value: value,
 			}
 			sum = append(sum, data)

@@ -2,6 +2,12 @@ package config
 
 const MemTotalReal = "1.3.6.1.4.1.2021.4.5.0"
 const MemAvailReal = "1.3.6.1.4.1.2021.4.6.0"
+const MemCacheReal = "1.3.6.1.4.1.2021.4.15.0"
+const MemBufferReal = "1.3.6.1.4.1.2021.4.14.0"
+const MemSwapTotal = "1.3.6.1.4.1.2021.4.3.0"
+const MemSwapAvail = "1.3.6.1.4.1.2021.4.3.0"
+const IOReceive = "1.3.6.1.4.1.2021.11.6.0"
+const IOSent = "1.3.6.1.4.1.2021.11.5.0"
 
 const CpuUsageUserPercent = "1.3.6.1.4.1.2021.11.9.0"
 const SsCpuRawUser = "1.3.6.1.4.1.2021.11.50.0"
@@ -12,6 +18,8 @@ const SsCpuRawWait = "1.3.6.1.4.1.2021.11.54.0"
 const SsCpuRawKernel = "1.3.6.1.4.1.2021.11.55.0"
 const SsCpuRawInterrupt = "1.3.6.1.4.1.2021.11.56.0"
 const SsCpuRawSoftIRQ = "1.3.6.1.4.1.2021.11.61.0"
+const SsCpuUser = "1.3.6.1.4.1.2021.11.9.0"
+const SsCpuSystem = "1.3.6.1.4.1.2021.11.10.0"
 
 // The total amount of memory free or available for use on
 // this host.  This value typically covers both real memory

@@ -124,7 +124,11 @@ func GetKafkaQueueController(c *gin.Context) {
 
 func GetKafkaPartitionController(c *gin.Context) {
 	data := services.GetKafkaPartitionOnline(c)
-	c.JSON(200, data)
+
+	reponse := Response{
+		Value: data,
+	}
+	c.JSON(200, reponse)
 }
 
 func GetPodupController(c *gin.Context) {
@@ -153,7 +157,7 @@ func GetKpiVtrackController(c *gin.Context) {
 		}
 		cal := KpiVtrack{
 			Pod:  result.Pod,
-			Rate: num / req,
+			Rate: (num / req) * 100,
 		}
 		reponse = append(reponse, cal)
 	}
@@ -161,7 +165,117 @@ func GetKpiVtrackController(c *gin.Context) {
 	c.JSON(200, reponse)
 
 }
+func GetCmdRedisController(c *gin.Context) {
+	data := services.RedisCmdPS(c)
+	c.JSON(200, data)
+}
 
+func GetRedisMemController(c *gin.Context) {
+	data := services.RedisMemUsed(c)
+	c.JSON(200, data)
+}
+
+func GetRateMqttMessageController(c *gin.Context) {
+	data := services.GetMqttRequest(c)
+	reponse := Response{
+		Value: data,
+	}
+	c.JSON(200, reponse)
+}
+
+func GetMqttClientController(c *gin.Context) {
+	data := services.GetMqttClientConnected(c)
+	c.JSON(200, data)
+}
+func GetInodeController(c *gin.Context) {
+	data := services.GetInodeUsage(c)
+	c.JSON(200, data)
+}
+
+func GetRxOnlyFile(c *gin.Context) {
+	data := services.GetReadOnlyFile(c)
+	c.JSON(200, data)
+}
+
+func GetDiskProController(c *gin.Context) {
+	var total, used []services.SysData
+	var mem []MemAll
+	total = services.DiskTotal(c)
+	used = services.DiskUsed(c)
+	var tnum, unum int
+	var err error
+	for _, tdata := range total {
+		for _, udata := range used {
+			if tdata.Url == udata.Url {
+				tnum, err = strconv.Atoi(tdata.Value)
+				if err != nil {
+					c.Error(err)
+				}
+				unum, err = strconv.Atoi(udata.Value)
+				if err != nil {
+					c.Error(err)
+				}
+				data := MemAll{
+					Server:    tdata.Url,
+					Total:     tdata.Value,
+					Available: strconv.Itoa(tnum - unum),
+				}
+				mem = append(mem, data)
+			}
+		}
+	}
+	c.JSON(200, mem)
+}
+
+func GetMemProController(c *gin.Context) {
+	var total, avail []services.SysData
+	var mem []MemAll
+	total = services.GetMemTotal(c)
+	avail = services.GetMemAvail(c)
+	for _, tdata := range total {
+		for _, udata := range avail {
+			if tdata.Url == udata.Url {
+				data := MemAll{
+					Server:    tdata.Url,
+					Total:     tdata.Value,
+					Available: udata.Value,
+				}
+				mem = append(mem, data)
+			}
+		}
+	}
+	c.JSON(200, mem)
+}
+
+func GetIoProController(c *gin.Context) {
+	var iosend, ioreceive []services.SysData
+	var iodata []IoData
+	iosend = services.GetIoSent(c)
+	ioreceive = services.GetIoReceive(c)
+	for _, sdata := range iosend {
+		for _, rdata := range ioreceive {
+			if sdata.Url == rdata.Url {
+				data := IoData{
+					Server:  sdata.Url,
+					Sent:    sdata.Value,
+					Receive: rdata.Value,
+				}
+				iodata = append(iodata, data)
+			}
+		}
+	}
+	c.JSON(200, iodata)
+}
+
+func GetMemCacheProController(c *gin.Context) {
+	data := services.GetMemCache(c)
+	c.JSON(200, data)
+}
+
+func GetMemBufferProController(c *gin.Context) {
+	data := services.GetMemBuffer(c)
+	c.JSON(200, data)
+}
 func GetPrometheusController(c *gin.Context) {
 	var request = validations.GetPrometheusVtrack{}
 	if requestErr := c.ShouldBind(&request); requestErr != nil {

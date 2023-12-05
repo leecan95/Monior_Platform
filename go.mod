@@ -1,11 +1,13 @@
 module Monitor_Platform
 
-go 1.21.1
+go 1.20
 
 require (
 	github.com/gin-contrib/cors v1.4.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/gosnmp/gosnmp v1.36.1
+	github.com/jmoiron/sqlx v1.3.5
+	github.com/lib/pq v1.2.0
 	github.com/prometheus/client_golang v1.16.0
 )
 

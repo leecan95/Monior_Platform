@@ -65,10 +65,57 @@ func GetAvailMemInfo(c *gin.Context) []int64 {
 	val = GetDataSNMP(c, config.Server250, config.MemAvailReal)
 	result = int64(val.(int))
 	sum = append(sum, result)
+
 	val = GetDataSNMP(c, config.Server251, config.MemAvailReal)
 	result = int64(val.(int))
 	sum = append(sum, result)
 	val = GetDataSNMP(c, config.Server252, config.MemAvailReal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	return sum
+}
+
+func GetMemCacheInfo(c *gin.Context) []int64 {
+	var sum []int64
+	val := GetDataSNMP(c, config.Server244, config.MemCacheReal)
+	result := int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server245, config.MemCacheReal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server246, config.MemCacheReal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server250, config.MemCacheReal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server251, config.MemCacheReal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server252, config.MemCacheReal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	return sum
+}
+
+func GetMemBufferInfo(c *gin.Context) []int64 {
+	var sum []int64
+	val := GetDataSNMP(c, config.Server244, config.MemBufferReal)
+	result := int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server245, config.MemBufferReal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server246, config.MemBufferReal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server250, config.MemBufferReal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server251, config.MemBufferReal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server252, config.MemBufferReal)
 	result = int64(val.(int))
 	sum = append(sum, result)
 	return sum
@@ -311,6 +358,144 @@ func GetDiskAvail(c *gin.Context) []int64 {
 	return sum
 }
 
+func GetIoReceiveData(c *gin.Context) []int64 {
+	var sum []int64
+	val := GetDataSNMP(c, config.Server244, config.IOReceive)
+	result := int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server245, config.IOReceive)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server246, config.IOReceive)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server250, config.IOReceive)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server251, config.IOReceive)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server252, config.IOReceive)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	return sum
+}
+
+func GetIoSentData(c *gin.Context) []int64 {
+	var sum []int64
+	val := GetDataSNMP(c, config.Server244, config.IOSent)
+	result := int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server245, config.IOSent)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server246, config.IOSent)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server250, config.IOSent)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server251, config.IOSent)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server252, config.IOSent)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	return sum
+}
+
+func GetMemSwapTotal(c *gin.Context) []int64 {
+	var sum []int64
+	val := GetDataSNMP(c, config.Server244, config.MemSwapTotal)
+	result := int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server245, config.MemSwapTotal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server246, config.MemSwapTotal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server250, config.MemSwapTotal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server251, config.MemSwapTotal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server252, config.MemSwapTotal)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	return sum
+}
+
+func GetMemSwapAvail(c *gin.Context) []int64 {
+	var sum []int64
+	val := GetDataSNMP(c, config.Server244, config.MemSwapAvail)
+	result := int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server245, config.MemSwapAvail)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server246, config.MemSwapAvail)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server250, config.MemSwapAvail)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server251, config.MemSwapAvail)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server252, config.MemSwapAvail)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	return sum
+}
+
+func GetCpuPercentUser(c *gin.Context) []int64 {
+	var sum []int64
+	val := GetDataSNMP(c, config.Server244, config.SsCpuUser)
+	result := int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server245, config.SsCpuUser)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server246, config.SsCpuUser)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server250, config.SsCpuUser)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server251, config.SsCpuUser)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server252, config.SsCpuUser)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	return sum
+}
+
+func GetCpuPercentSystem(c *gin.Context) []int64 {
+	var sum []int64
+	val := GetDataSNMP(c, config.Server244, config.SsCpuSystem)
+	result := int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server245, config.SsCpuSystem)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server246, config.SsCpuSystem)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server250, config.SsCpuSystem)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server251, config.SsCpuSystem)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	val = GetDataSNMP(c, config.Server252, config.SsCpuSystem)
+	result = int64(val.(int))
+	sum = append(sum, result)
+	return sum
+}
+
 func GetDataSNMP(c *gin.Context, target string, oid string) interface{} {
 	mu.Lock()
 	defer mu.Unlock()
@@ -325,6 +510,28 @@ func GetDataSNMP(c *gin.Context, target string, oid string) interface{} {
 	}
 	defer snmp.Manager.Conn.Close()
 
+	result, err2 := snmp.Manager.Get(oids) // Lấy dữ liệu từ SNMP agent
+	if err2 != nil {
+		log.Printf("Get() err: %v", err2)
+		c.Error(err)
+	}
+
+	return result.Variables[0].Value
+}
+
+func GetPreviousDataSNMP(c *gin.Context, target string, oid string) interface{} {
+	mu.Lock()
+	defer mu.Unlock()
+	var oids []string
+	oids = append(oids, oid)
+	snmp.Manager.Target = target
+
+	err := snmp.Manager.Connect()
+	if err != nil {
+		log.Printf("Connect() err: %v", err)
+		c.Error(err)
+	}
+	defer snmp.Manager.Conn.Close()
 	result, err2 := snmp.Manager.Get(oids) // Lấy dữ liệu từ SNMP agent
 	if err2 != nil {
 		log.Printf("Get() err: %v", err2)
