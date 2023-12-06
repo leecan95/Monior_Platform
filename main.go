@@ -16,7 +16,7 @@ func main() {
 		for {
 			GetCpuUsage()
 			services.MonitorKpiApi(db)
-			time.Sleep(15 * time.Second)
+			time.Sleep(30 * time.Second)
 		}
 	}()
 	go func() {
