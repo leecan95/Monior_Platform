@@ -26,6 +26,7 @@ type Systemreponse struct {
 				Instance string `json:"instance"`
 				Device   string `json:"device"`
 				Job      string `json:"job"`
+				Type     string `json:"type"`
 			} `json:"metric"`
 			Value []interface{} `json:"value"`
 		} `json:"result"`
@@ -88,6 +89,17 @@ type SysData struct {
 	Device string `json:"device"`
 	Url    string `json:"url"`
 	Value  string `json:"value"`
+}
+
+type MongoData struct {
+	Type  string `json:"type"`
+	Url   string `json:"url"`
+	Value string `json:"value"`
+}
+
+type MongoHealth struct {
+	Url   string `json:"url"`
+	Value string `json:"value"`
 }
 
 type KpiData struct {
