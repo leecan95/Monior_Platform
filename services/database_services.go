@@ -221,3 +221,75 @@ func GetNetworkMongo(c *gin.Context) []MongoData {
 	}
 	return sum
 }
+
+/*** PostgreSql ***/
+
+func Maxconnections(c *gin.Context) []MongoData {
+	var response Systemreponse
+	var sum []MongoData
+	url := config.PrometheusUrl
+	params := "?query=pg_settings_max_connections"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := MongoData{
+				Url:   result.Metric.Instance,
+				Value: value, //values is bytes
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func DatabaseSize(c *gin.Context) []MongoData {
+	var response Systemreponse
+	var sum []MongoData
+	url := config.PrometheusUrl
+	params := "?query=sum(pg_database_size_bytes{})"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := MongoData{
+				Url:   result.Metric.Instance,
+				Value: value, //values is bytes
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}

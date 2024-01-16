@@ -1692,3 +1692,80 @@ func DiskUsed(c *gin.Context) []SysData {
 	}
 	return sum
 }
+
+func MaxfileOpen(c *gin.Context) []SysData {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=node_filefd_maximum{}"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: value,
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}
+
+func NTPSynchronous(c *gin.Context) []SysData {
+	var response Systemreponse
+	var sum []SysData
+	url := config.PrometheusUrl
+	params := "?query=node_timex_sync_status{}"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	for _, result := range response.Data.Result {
+		if value, ok := result.Value[1].(string); ok && value == "1" {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: "Syn",
+			}
+			sum = append(sum, data)
+		}
+		if value, ok := result.Value[1].(string); ok && value == "0" {
+			data := SysData{
+				Url:   result.Metric.Instance,
+				Value: "NotSyn",
+			}
+			sum = append(sum, data)
+		}
+	}
+	return sum
+}

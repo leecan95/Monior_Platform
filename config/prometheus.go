@@ -1,6 +1,6 @@
 package config
 
-const PrometheusUrl = "http://prometheus-stack-kube-prom-prometheus.monitoring:9090/api/v1/query"
+const PrometheusUrl = "http://kube-prometheus-stack-prometheus.monitoring:9090/api/v1/query"
 
 type KpiData struct {
 	Pod    string `json:"pod"`
