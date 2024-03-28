@@ -19,7 +19,7 @@ func main() {
 	}()
 	go func() {
 		for {
-			fmt.Print("14012024\n")
+			fmt.Print("28032024\n")
 			time.Sleep(5 * time.Second)
 		}
 
@@ -34,5 +34,5 @@ func main() {
 
 }
 func GetCpuUsage() {
-	fmt.Print("Monitor 14012024\n")
+	fmt.Print("Monitor 28032024\n")
 }

@@ -202,7 +202,7 @@ func GetUrlState(c *gin.Context) interface{} {
 	var response KafkaReponse
 	url := config.PrometheusUrl
 	var sum []UrlData
-	params := "?query=probe_success{system=~\"innoway\"}"
+	params := "?query=probe_success{system=~\"viettelmap\"}"
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
@@ -245,7 +245,7 @@ func GetHttpStatusCode(c *gin.Context) interface{} {
 	var response KafkaReponse
 	url := config.PrometheusUrl
 	var sum []UrlData
-	params := "?query=probe_http_status_code{system=~\"innoway\"}"
+	params := "?query=probe_http_status_code{system=~\"viettelmap\"}"
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
@@ -992,54 +992,54 @@ func GetKpiVtrack(c *gin.Context) []KpiData {
 		}
 		sum = append(sum, data)
 	}
-
-	params = "?query=sum(vtdevices_api_request_error_count)"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		c.Error(err)
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		c.Error(err)
-	}
-
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		c.Error(err)
-	}
-
-	evalue, eok = response.Data.Result[0].Value[1].(string)
-
-	params = "?query=sum(vtdevices_api_request_count)"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		c.Error(err)
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		c.Error(err)
-	}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		c.Error(err)
-	}
-	value, ok = response.Data.Result[0].Value[1].(string)
-	if ok && eok {
-		data := KpiData{
-			Pod:   "device",
-			Req:   value,
-			Error: evalue,
-		}
-		sum = append(sum, data)
-	}
+	//
+	//params = "?query=sum(vtdevices_api_request_error_count)"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	c.Error(err)
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	c.Error(err)
+	//}
+	//
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	c.Error(err)
+	//}
+	//
+	//evalue, eok = response.Data.Result[0].Value[1].(string)
+	//
+	//params = "?query=sum(vtdevices_api_request_count)"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	c.Error(err)
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	c.Error(err)
+	//}
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	c.Error(err)
+	//}
+	//value, ok = response.Data.Result[0].Value[1].(string)
+	//if ok && eok {
+	//	data := KpiData{
+	//		Pod:   "device",
+	//		Req:   value,
+	//		Error: evalue,
+	//	}
+	//	sum = append(sum, data)
+	//}
 	params = "?query=sum(organizations_api_request_error_count)"
 	resp, err = http.Get(url + params)
 	if err != nil {
