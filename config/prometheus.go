@@ -8,3 +8,16 @@ type KpiData struct {
 	Req    string `json:"request"`
 	Error  string `json:"error"`
 }
+
+type LatencyKpi struct {
+	Api        string `json:"api"`
+	Total      string `json:"total"`
+	Count      string `json:"count"`      //so luong ban ghi nho hon 5s
+	Percentile string `json:"percentile"` //" percentile 95 theo yeu cau
+	Result     string `json:"result"`
+}
+
+type SuccessKpi struct {
+	Api   string  `json:"api"`
+	Value float64 `json:"value"`
+}

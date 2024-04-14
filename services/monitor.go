@@ -4,6 +4,7 @@ import (
 	"Monitor_Platform/config"
 	"Monitor_Platform/model"
 	"encoding/json"
+	"fmt"
 	"github.com/jmoiron/sqlx"
 	"io/ioutil"
 	"log"
@@ -214,6 +215,8 @@ func MonitorKpiModule(db *sqlx.DB) error {
 func MonitorKpiApi(db *sqlx.DB) error {
 	var response PodReponse
 	var sum []config.KpiData
+	var value, evalue string
+	var ok, eok bool
 	url := config.PrometheusUrl
 	params := "?query=users_api_request_error_count{method=\"user_vtracking_login\"}"
 	resp, err := http.Get(url + params)
@@ -234,7 +237,20 @@ func MonitorKpiApi(db *sqlx.DB) error {
 		log.Printf("error unmarshaling JSON: %s", err)
 		return err
 	}
-	evalue, eok := response.Data.Result[0].Value[1].(string)
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		evalue, eok = response.Data.Result[0].Value[1].(string)
+		if !eok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			evalue = "0"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		eok = false
+		evalue = "0"
+	}
 
 	params = "?query=users_api_request_count{method=\"user_vtracking_login\"}"
 	resp, err = http.Get(url + params)
@@ -255,211 +271,233 @@ func MonitorKpiApi(db *sqlx.DB) error {
 		return err
 	}
 
-	value, ok := response.Data.Result[0].Value[1].(string)
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		value, ok = response.Data.Result[0].Value[1].(string)
+		if !ok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			value = "1"
+			ok = false
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		value = "1"
+	}
 	if ok && eok {
+		fmt.Println("giá trị value " + value + " " + evalue)
 		data := config.KpiData{
-			Pod:    "user",
-			Method: "user_vtracking_login",
-			Req:    value,
-			Error:  evalue,
+			Pod:   "user_vtracking_login",
+			Req:   value,
+			Error: evalue,
+		}
+		sum = append(sum, data)
+	}
+	if !ok || !eok {
+		fmt.Println("khong co gia tri value ")
+		data := config.KpiData{
+			Pod:   "user_vtracking_login",
+			Req:   "1",
+			Error: "0",
 		}
 		sum = append(sum, data)
 	}
 
-	params = "?query=users_api_request_error_count{method=\"get_list_users\"}"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		return err
-	}
+	//params = "?query=users_api_request_error_count{method=\"get_list_users\"}"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	return err
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	return err
+	//}
+	//
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	return err
+	//}
+	//
+	//evalue, eok = response.Data.Result[0].Value[1].(string)
+	//
+	//params = "?query=users_api_request_count{method=\"get_list_users\"}"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	return err
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	return err
+	//}
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	return err
+	//}
+	//value, ok = response.Data.Result[0].Value[1].(string)
+	//if ok && eok {
+	//	data := config.KpiData{
+	//		Pod:    "users",
+	//		Method: "get_list_user",
+	//		Req:    value,
+	//		Error:  evalue,
+	//	}
+	//	sum = append(sum, data)
+	//}
+	//params = "?query=vtdevices_api_request_error_count{method=\"GetFilteredVehicles\"}"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	return err
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	return err
+	//}
+	//
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	return err
+	//}
+	//
+	//evalue, eok = response.Data.Result[0].Value[1].(string)
+	//
+	//params = "?query=vtdevices_api_request_count{method=\"GetFilteredVehicles\"}"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	return err
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	return err
+	//}
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	return err
+	//}
+	//value, ok = response.Data.Result[0].Value[1].(string)
+	//if ok && eok {
+	//	data := config.KpiData{
+	//		Pod:    "devices",
+	//		Method: "Get Vehicles",
+	//		Req:    value,
+	//		Error:  evalue,
+	//	}
+	//	sum = append(sum, data)
+	//}
 
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		return err
-	}
-
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		return err
-	}
-
-	evalue, eok = response.Data.Result[0].Value[1].(string)
-
-	params = "?query=users_api_request_count{method=\"get_list_users\"}"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		return err
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		return err
-	}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		return err
-	}
-	value, ok = response.Data.Result[0].Value[1].(string)
-	if ok && eok {
-		data := config.KpiData{
-			Pod:    "users",
-			Method: "get_list_user",
-			Req:    value,
-			Error:  evalue,
-		}
-		sum = append(sum, data)
-	}
-	params = "?query=vtdevices_api_request_error_count{method=\"GetFilteredVehicles\"}"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		return err
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		return err
-	}
-
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		return err
-	}
-
-	evalue, eok = response.Data.Result[0].Value[1].(string)
-
-	params = "?query=vtdevices_api_request_count{method=\"GetFilteredVehicles\"}"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		return err
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		return err
-	}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		return err
-	}
-	value, ok = response.Data.Result[0].Value[1].(string)
-	if ok && eok {
-		data := config.KpiData{
-			Pod:    "devices",
-			Method: "Get Vehicles",
-			Req:    value,
-			Error:  evalue,
-		}
-		sum = append(sum, data)
-	}
-
-	params = "?query=vtdevices_api_request_error_count{method=\"GetFilteredDevices\"}"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		return err
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		return err
-	}
-
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		return err
-	}
-
-	evalue, eok = response.Data.Result[0].Value[1].(string)
-
-	params = "?query=vtdevices_api_request_count{method=\"GetFilteredDevices\"}"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		return err
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		return err
-	}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		return err
-	}
-	value, ok = response.Data.Result[0].Value[1].(string)
-	if ok && eok {
-		data := config.KpiData{
-			Pod:    "attribute",
-			Method: "Get List Devices",
-			Req:    value,
-			Error:  evalue,
-		}
-		sum = append(sum, data)
-	}
-
-	params = "?query=organizations_api_request_error_count{method=\"get_tree_org_ids\"}"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		return err
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		return err
-	}
-
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		return err
-	}
-
-	evalue, eok = response.Data.Result[0].Value[1].(string)
-
-	params = "?query=organizations_api_request_count{method=\"get_tree_org_ids\"}"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		return err
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		return err
-	}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		return err
-	}
-	value, ok = response.Data.Result[0].Value[1].(string)
-	if ok && eok {
-		data := config.KpiData{
-			Pod:    "organizations",
-			Method: "Get list org",
-			Req:    value,
-			Error:  evalue,
-		}
-		sum = append(sum, data)
-	}
+	//params = "?query=vtdevices_api_request_error_count{method=\"GetFilteredDevices\"}"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	return err
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	return err
+	//}
+	//
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	return err
+	//}
+	//
+	//evalue, eok = response.Data.Result[0].Value[1].(string)
+	//
+	//params = "?query=vtdevices_api_request_count{method=\"GetFilteredDevices\"}"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	return err
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	return err
+	//}
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	return err
+	//}
+	//value, ok = response.Data.Result[0].Value[1].(string)
+	//if ok && eok {
+	//	data := config.KpiData{
+	//		Pod:    "attribute",
+	//		Method: "Get List Devices",
+	//		Req:    value,
+	//		Error:  evalue,
+	//	}
+	//	sum = append(sum, data)
+	//}
+	//
+	//params = "?query=organizations_api_request_error_count{method=\"get_tree_org_ids\"}"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	return err
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	return err
+	//}
+	//
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	return err
+	//}
+	//
+	//evalue, eok = response.Data.Result[0].Value[1].(string)
+	//
+	//params = "?query=organizations_api_request_count{method=\"get_tree_org_ids\"}"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	return err
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	return err
+	//}
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	return err
+	//}
+	//value, ok = response.Data.Result[0].Value[1].(string)
+	//if ok && eok {
+	//	data := config.KpiData{
+	//		Pod:    "organizations",
+	//		Method: "Get list org",
+	//		Req:    value,
+	//		Error:  evalue,
+	//	}
+	//	sum = append(sum, data)
+	//}
 	model.KpiModule(db, nil)
 	return nil
 }

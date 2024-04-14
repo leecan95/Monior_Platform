@@ -2,7 +2,9 @@ package model
 
 import (
 	"Monitor_Platform/config"
+	"github.com/gin-gonic/gin"
 	"strconv"
+	"time"
 
 	//"Monitor_Platform/services"
 	"database/sql"
@@ -41,6 +43,9 @@ CREATE TABLE kpimodule (
     timestamp timestamptz DEFAULT current_timestamp
 )`
 
+type PostgreDb struct {
+	db *sql.DB
+}
 type CpuUsage struct {
 	ID        int     `db:"id"`
 	CpuID     int     `db:"cpu_id"`
@@ -102,6 +107,584 @@ func ConnectToDb() *sqlx.DB {
 		log.Fatalln(err)
 	}
 	return db
+}
+
+func ConnectNewDB(cfg config.DBConfig) (*PostgreDb, error) {
+	url := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", cfg.Host, cfg.Port, cfg.User, cfg.Name, cfg.Pass, cfg.SSLMode, cfg.SSLCert, cfg.SSLKey, cfg.SSLRootcert)
+
+	db, err := sql.Open("postgres", url)
+	if err != nil {
+		return nil, err
+	}
+	return &PostgreDb{db}, nil
+}
+
+func ConnectToNewDb() *PostgreDb {
+	var cfg config.DBConfig
+	cfg = LoadDBConfig()
+	db, err := ConnectNewDB(cfg)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return db
+}
+
+func ConnectTransDB(cfg config.DBConfig) (*PostgreDb, error) {
+	url := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", cfg.Host, cfg.Port, cfg.User, "transactions", cfg.Pass, cfg.SSLMode, cfg.SSLCert, cfg.SSLKey, cfg.SSLRootcert)
+
+	db, err := sql.Open("postgres", url)
+	if err != nil {
+		return nil, err
+	}
+	return &PostgreDb{db}, nil
+}
+
+func ConnectToTransDb() *PostgreDb {
+	var cfg config.DBConfig
+	cfg = LoadDBConfig()
+	db, err := ConnectTransDB(cfg)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return db
+}
+
+func (c *PostgreDb) QueryData() error {
+	fmt.Print("query data")
+	rows, err := c.db.Query("select * from kpimodule")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var pod string
+		var value string
+		var time string
+		if err := rows.Scan(&pod, &value, &time); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return err
+		}
+		fmt.Printf("Pod : %s, Value: %s, Time: %s\n", pod, value, time)
+	}
+	return nil
+}
+
+func (c *PostgreDb) QueryLatency() (config.LatencyKpi, error) {
+	fmt.Print("query data")
+	var data config.LatencyKpi
+	rows, err := c.db.Query("WITH Percentile AS (\nSELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5) AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions) AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5) > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions)) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var count string
+		var latency string
+		var total string
+		var result string
+		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.LatencyKpi{
+			Api:        "Total",
+			Total:      total,
+			Count:      count,
+			Percentile: latency,
+			Result:     result,
+		}
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+	}
+	return data, nil
+}
+
+func GetOverallLatency(c *gin.Context) (config.LatencyKpi, error) {
+	var cfg config.DBConfig
+	var data config.LatencyKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryLatency()
+	return data, nil
+}
+
+func (c *PostgreDb) QueryLoginLatency() (config.LatencyKpi, error) {
+	fmt.Print("query data")
+	var data config.LatencyKpi
+	rows, err := c.db.Query("WITH Percentile AS (\n    SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n    WHERE url = '/app/vtracking/login'\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url = '/app/vtracking/login') AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions WHERE url = '/app/vtracking/login') AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url = '/app/vtracking/login') > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions WHERE url = '/app/vtracking/login')) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var count string
+		var latency string
+		var total string
+		var result string
+		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.LatencyKpi{
+			Api:        "Login",
+			Total:      total,
+			Count:      count,
+			Percentile: latency,
+			Result:     result,
+		}
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+	}
+	return data, nil
+}
+
+func GetLoginLatency(c *gin.Context) (config.LatencyKpi, error) {
+	var cfg config.DBConfig
+	var data config.LatencyKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryLoginLatency()
+	return data, nil
+}
+
+func (c *PostgreDb) QueryReportLatency() (config.LatencyKpi, error) {
+	fmt.Print("query data")
+	var data config.LatencyKpi
+	rows, err := c.db.Query("WITH Percentile AS (\n    SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n    WHERE url LIKE '%attributes/vtracking/report/overview%'\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url LIKE '%attributes/vtracking/report/overview%') AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions WHERE url LIKE '%attributes/vtracking/report/overview%') AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url LIKE '%attributes/vtracking/report/overview%') > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions WHERE url LIKE '%attributes/vtracking/report/overview%')) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var count string
+		var latency string
+		var total string
+		var result string
+		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.LatencyKpi{
+			Api:        "Report",
+			Total:      total,
+			Count:      count,
+			Percentile: latency,
+			Result:     result,
+		}
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+	}
+	return data, nil
+}
+
+func GetReportLatency(c *gin.Context) (config.LatencyKpi, error) {
+	var cfg config.DBConfig
+	var data config.LatencyKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryReportLatency()
+	return data, nil
+}
+
+func (c *PostgreDb) QueryGetimageLatency() (config.LatencyKpi, error) {
+	fmt.Print("query data")
+	var data config.LatencyKpi
+	rows, err := c.db.Query("WITH Percentile AS (\nSELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5) AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions) AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5) > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions)) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var count string
+		var latency string
+		var total string
+		var result string
+		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.LatencyKpi{
+			Api:        "Get_images",
+			Total:      total,
+			Count:      count,
+			Percentile: latency,
+			Result:     result,
+		}
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+	}
+	return data, nil
+}
+
+func GetImageLatency(c *gin.Context) (config.LatencyKpi, error) {
+	var cfg config.DBConfig
+	var data config.LatencyKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryGetimageLatency()
+	return data, nil
+}
+
+func (c *PostgreDb) QueryTrackingLatency() (config.LatencyKpi, error) {
+	fmt.Print("query data")
+	var data config.LatencyKpi
+	rows, err := c.db.Query("WITH Percentile AS (\n    SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n    WHERE url LIKE '%attributes/vtracking/logged/VEHICLE/%'\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url LIKE '%attributes/vtracking/logged/VEHICLE/%') AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions WHERE url LIKE '%attributes/vtracking/logged/VEHICLE/%') AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url LIKE '%attributes/vtracking/logged/VEHICLE/%') > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions WHERE url LIKE '%attributes/vtracking/logged/VEHICLE/%')) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var count string
+		var latency string
+		var total string
+		var result string
+		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.LatencyKpi{
+			Api:        "Tracking",
+			Total:      total,
+			Count:      count,
+			Percentile: latency,
+			Result:     result,
+		}
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+	}
+	return data, nil
+}
+
+func GetTrackingLatency(c *gin.Context) (config.LatencyKpi, error) {
+	var cfg config.DBConfig
+	var data config.LatencyKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryTrackingLatency()
+	return data, nil
+}
+
+func (c *PostgreDb) QueryRequestCount() (config.SuccessKpi, error) {
+	fmt.Print("query request data")
+	var data config.SuccessKpi
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.SuccessKpi{
+			Api:   "Total",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func (c *PostgreDb) QuerySuccessRequestCount() (config.SuccessKpi, error) {
+	fmt.Print("query request data")
+	var data config.SuccessKpi
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions WHERE response_body NOT LIKE '%\"code\"%'")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.SuccessKpi{
+			Api:   "Total",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func GetRequestTotal(c *gin.Context) (config.SuccessKpi, error) {
+	var cfg config.DBConfig
+	var total, count, result config.SuccessKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	total, _ = db2.QueryRequestCount()
+	count, _ = db2.QuerySuccessRequestCount()
+	result = config.SuccessKpi{
+		Api:   total.Api,
+		Value: (count.Value / total.Value) * 100,
+	}
+	return result, nil
+}
+
+func (c *PostgreDb) QueryRequestLoginCount() (config.SuccessKpi, error) {
+	fmt.Print("query request data")
+	var data config.SuccessKpi
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\nWHERE url = '/app/vtracking/login'")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.SuccessKpi{
+			Api:   "Login",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func (c *PostgreDb) QuerySuccessRequestLoginCount() (config.SuccessKpi, error) {
+	fmt.Print("query request data")
+	var data config.SuccessKpi
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\nWHERE response_body NOT LIKE '%\"code\"%'\n    AND url = '/app/vtracking/login'")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.SuccessKpi{
+			Api:   "Login",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func GetRequestLoginTotal(c *gin.Context) (config.SuccessKpi, error) {
+	var cfg config.DBConfig
+	var total, count, result config.SuccessKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	total, _ = db2.QueryRequestCount()
+	count, _ = db2.QuerySuccessRequestCount()
+	result = config.SuccessKpi{
+		Api:   total.Api,
+		Value: (count.Value / total.Value) * 100,
+	}
+	return result, nil
+}
+
+func (c *PostgreDb) QueryRequestReportCount() (config.SuccessKpi, error) {
+	fmt.Print("query request data")
+	var data config.SuccessKpi
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\n WHERE url LIKE '%attributes/vtracking/report/overview%'")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.SuccessKpi{
+			Api:   "Report",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func (c *PostgreDb) QuerySuccessRequestReportCount() (config.SuccessKpi, error) {
+	fmt.Print("query request data")
+	var data config.SuccessKpi
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions WHERE response_body NOT LIKE '%\"code\"%' AND url LIKE '%attributes/vtracking/report/overview%'")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.SuccessKpi{
+			Api:   "Report",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func GetRequestReportTotal(c *gin.Context) (config.SuccessKpi, error) {
+	var cfg config.DBConfig
+	var total, count, result config.SuccessKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	total, _ = db2.QueryRequestCount()
+	count, _ = db2.QuerySuccessRequestCount()
+	result = config.SuccessKpi{
+		Api:   total.Api,
+		Value: (count.Value / total.Value) * 100,
+	}
+	return result, nil
+}
+
+func (c *PostgreDb) QueryRequestGetImageCount() (config.SuccessKpi, error) {
+	fmt.Print("query request data")
+	var data config.SuccessKpi
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\n WHERE url LIKE '%vtracking/s3%'")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.SuccessKpi{
+			Api:   "Image",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func (c *PostgreDb) QuerySuccessRequestGetImageCount() (config.SuccessKpi, error) {
+	fmt.Print("query request data")
+	var data config.SuccessKpi
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions WHERE response_body NOT LIKE '%\"code\"%' AND url LIKE '%vtracking/s3%'")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.SuccessKpi{
+			Api:   "Image",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func GetRequestGetImageTotal(c *gin.Context) (config.SuccessKpi, error) {
+	var cfg config.DBConfig
+	var total, count, result config.SuccessKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	total, _ = db2.QueryRequestCount()
+	count, _ = db2.QuerySuccessRequestCount()
+	result = config.SuccessKpi{
+		Api:   total.Api,
+		Value: (count.Value / total.Value) * 100,
+	}
+	return result, nil
+}
+
+func (c *PostgreDb) QueryRequestTrackingCount() (config.SuccessKpi, error) {
+	fmt.Print("query request data")
+	var data config.SuccessKpi
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\n WHERE url LIKE '%attributes/vtracking/logged/VEHICLE/%'")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.SuccessKpi{
+			Api:   "Tracking",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func (c *PostgreDb) QuerySuccessRequestTrackingCount() (config.SuccessKpi, error) {
+	fmt.Print("query request data")
+	var data config.SuccessKpi
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions WHERE response_body NOT LIKE '%\"code\"%' AND url LIKE '%attributes/vtracking/logged/VEHICLE/%'")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.SuccessKpi{
+			Api:   "Tracking",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func GetRequestTrackingTotal(c *gin.Context) (config.SuccessKpi, error) {
+	var cfg config.DBConfig
+	var total, count, result config.SuccessKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	total, _ = db2.QueryRequestTrackingCount()
+	count, _ = db2.QuerySuccessRequestTrackingCount()
+	result = config.SuccessKpi{
+		Api:   total.Api,
+		Value: (count.Value / total.Value) * 100,
+	}
+	return result, nil
+}
+
+func (c *PostgreDb) SetDowntimeDB(pod string, downtime, total uint64) {
+
+	created_time := time.Now()
+	query := `INSERT INTO your_table_name (pod, downtime, total, created_time) VALUES ($1, $2, $3, $4)`
+	_, err := c.db.Exec(query, pod, downtime, total, created_time)
+	if err != nil {
+		log.Printf("Failed to insert data into PostgreSQL: %v", err)
+	} else {
+		log.Println("Data inserted successfully into PostgreSQL")
+	}
 }
 
 func Test(db *sqlx.DB) {

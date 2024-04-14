@@ -42,3 +42,9 @@ type KpiVtrack struct {
 	Pod  string  `json:"pod"`
 	Rate float64 `json:"rate"`
 }
+
+type LatencyApi struct {
+	Api        string `json:"api"`
+	Total      string `json:"total"`
+	Percentile string `json:"percentile"`
+}

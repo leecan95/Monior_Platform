@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"Monitor_Platform/config"
 	"Monitor_Platform/services"
 	"Monitor_Platform/validations"
 	"fmt"
@@ -157,6 +158,31 @@ func GetKpiVtrackController(c *gin.Context) {
 		}
 		cal := KpiVtrack{
 			Pod:  result.Pod,
+			Rate: (100 - (num/req)*100),
+		}
+		reponse = append(reponse, cal)
+	}
+
+	c.JSON(200, reponse)
+
+}
+
+func GetKpiLatencyVtrackController(c *gin.Context) {
+	var data []services.KpiData
+	var reponse []KpiVtrack
+	data = services.GetKpiLatencyVtrack(c)
+
+	for _, result := range data {
+		req, err := strconv.ParseFloat(result.Req, 64)
+		num, err1 := strconv.ParseFloat(result.Error, 64)
+		if err != nil {
+			c.Error(err)
+		}
+		if err1 != nil {
+			c.Error(err1)
+		}
+		cal := KpiVtrack{
+			Pod:  result.Pod,
 			Rate: (num / req) * 100,
 		}
 		reponse = append(reponse, cal)
@@ -165,6 +191,103 @@ func GetKpiVtrackController(c *gin.Context) {
 	c.JSON(200, reponse)
 
 }
+
+func GetKpiDowntimeController(c *gin.Context) {
+	var data []services.KpiData
+	var reponse []KpiVtrack
+	data = services.GetDownTimeVtrack(c)
+
+	for _, result := range data {
+		req, err := strconv.ParseFloat(result.Req, 64)
+		num, err1 := strconv.ParseFloat(result.Error, 64)
+		if err != nil {
+			c.Error(err)
+		}
+		if err1 != nil {
+			c.Error(err1)
+		}
+		cal := KpiVtrack{
+			Pod:  result.Pod,
+			Rate: (num / req) * 100,
+		}
+		reponse = append(reponse, cal)
+	}
+
+	c.JSON(200, reponse)
+}
+
+func GetKpiLatencyDBController(c *gin.Context) {
+	var data []config.LatencyKpi
+	data = services.PgLatencyKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiLatencyDBTotalController(c *gin.Context) {
+	var data config.LatencyKpi
+	data = services.PgLatencyTotalKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiLatencyDBLoginController(c *gin.Context) {
+	var data config.LatencyKpi
+	data = services.PgLatencyLoginKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiLatencyDBReportController(c *gin.Context) {
+	var data config.LatencyKpi
+	data = services.PgLatencyReportKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiLatencyDBGetImageController(c *gin.Context) {
+	var data config.LatencyKpi
+	data = services.PgLatencyGetImagesKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiLatencyDBTrackingController(c *gin.Context) {
+	var data config.LatencyKpi
+	data = services.PgLatencyTrackingKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiRequestDBController(c *gin.Context) {
+	var data []config.SuccessKpi
+	data = services.PgRequestKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiRequestDBTotalController(c *gin.Context) {
+	var data config.SuccessKpi
+	data = services.PgRequestTotalKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiRequestDBLoginController(c *gin.Context) {
+	var data config.SuccessKpi
+	data = services.PgRequestLoginKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiRequestDBGetImagesController(c *gin.Context) {
+	var data config.SuccessKpi
+	data = services.PgRequestGetImageKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiRequestDBReportController(c *gin.Context) {
+	var data config.SuccessKpi
+	data = services.PgRequestReportKpi(c)
+	c.JSON(200, data)
+}
+
+func GetKpiRequestDBTrackingController(c *gin.Context) {
+	var data config.SuccessKpi
+	data = services.PgRequestTrackingKpi(c)
+	c.JSON(200, data)
+}
+
 func GetCmdRedisController(c *gin.Context) {
 	data := services.RedisCmdPS(c)
 	c.JSON(200, data)

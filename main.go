@@ -7,19 +7,24 @@ import (
 )
 
 func main() {
-	//model.LoadDBConfig()
+	//var cfg config.DBConfig
+	//cfg = model.LoadDBConfig()
 	//db := model.ConnectToDb()
 	//defer db.Close()
+	//db, _ := model.ConnectNewDB(cfg)
+	//db2, _ := model.ConnectTransDB(cfg)
 	go func() {
 		for {
 			GetCpuUsage()
-			//	services.MonitorKpiApi(db)
-			time.Sleep(30 * time.Second)
+			//services.MonitorKpiApi(db)
+			//db.QueryData()
+			//db2.QueryLatency()
+			time.Sleep(60 * time.Second)
 		}
 	}()
 	go func() {
 		for {
-			fmt.Print("01042024\n")
+			fmt.Print("08042024\n")
 			time.Sleep(5 * time.Second)
 		}
 
@@ -34,5 +39,5 @@ func main() {
 
 }
 func GetCpuUsage() {
-	fmt.Print("Monitor 01042024\n")
+	fmt.Print("Monitor 08042024\n")
 }

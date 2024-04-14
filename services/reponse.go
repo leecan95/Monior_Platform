@@ -33,6 +33,22 @@ type Systemreponse struct {
 	} `json:"data"`
 }
 
+type Pgreponse struct {
+	Status string `json:"status"`
+	Data   struct {
+		ResultType string `json:"resultType"`
+		Result     []struct {
+			Metric struct {
+				Instance  string `json:"instance"`
+				DatName   string `json:"datname"`
+				Job       string `json:"job"`
+				Namespace string `json:"namespace"`
+			} `json:"metric"`
+			Value []interface{} `json:"value"`
+		} `json:"result"`
+	} `json:"data"`
+}
+
 type CmdReponse struct {
 	Status string `json:"status"`
 	Data   struct {
@@ -95,6 +111,13 @@ type MongoData struct {
 	Type  string `json:"type"`
 	Url   string `json:"url"`
 	Value string `json:"value"`
+}
+
+type PgData struct {
+	Datname   string `json:"datname"`
+	Namespace string `json:"namespace"`
+	Url       string `json:"url"`
+	Value     string `json:"value"`
 }
 
 type MongoHealth struct {
