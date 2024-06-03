@@ -1,17 +1,19 @@
 package main
 
 import (
+	"Monitor_Platform/config"
+	"Monitor_Platform/model"
 	"Monitor_Platform/routes"
 	"fmt"
 	"time"
 )
 
 func main() {
-	//var cfg config.DBConfig
-	//cfg = model.LoadDBConfig()
+	var cfg config.DBConfig
+	cfg = model.LoadDBConfig()
 	//db := model.ConnectToDb()
-	//defer db.Close()
-	//db, _ := model.ConnectNewDB(cfg)
+	db, _ := model.ConnectPoolDB(cfg)
+	defer db.Close()
 	//db2, _ := model.ConnectTransDB(cfg)
 	go func() {
 		for {
@@ -29,8 +31,7 @@ func main() {
 		}
 
 	}()
-	r := routes.SetupRouter()
-
+	r := routes.SetupRouter(db)
 	err := r.Run(":8933")
 	if err != nil {
 		panic(err)

@@ -3,6 +3,7 @@ package routes
 import (
 	"Monitor_Platform/controllers"
 	"Monitor_Platform/middlewares"
+	"Monitor_Platform/model"
 	"Monitor_Platform/services"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -10,7 +11,7 @@ import (
 	"net/http"
 )
 
-func SetupRouter() *gin.Engine {
+func SetupRouter(db *model.PostgreDB) *gin.Engine {
 	route := gin.Default()
 
 	config := cors.DefaultConfig()
@@ -97,6 +98,11 @@ func SetupRouter() *gin.Engine {
 	})
 	route.Use(func(c *gin.Context) {
 		services.IncHttpRequest(c)
+		c.Next()
+	})
+	route.Use(func(c *gin.Context) {
+		// Đưa connection pool vào context của request
+		c.Set("dbpool", db)
 		c.Next()
 	})
 	route.GET("/metrics", gin.WrapH(promhttp.Handler()))
