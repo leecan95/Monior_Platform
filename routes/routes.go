@@ -48,7 +48,7 @@ func SetupRouter(db *model.PostgreDB) *gin.Engine {
 	route.GET("ems/snmp/memory/all", controllers.GetMemController)
 	route.GET("ems/snmp/memory/swap", controllers.GetMemSwapController)
 	route.GET("ems/snmp/disk/all", controllers.GetDiskController)
-	route.GET("ems/snmp/cpu/usage", controllers.GetCpuUsageController)
+	route.GET("ems/snmp/cpu/usage", controllers.GetCpuUsageVerController)
 	route.GET("ems/snmp/io/data", controllers.GetIODataController)
 	route.GET("ems/users/tps", controllers.GetUsersTPSController)
 	route.GET("ems/organizations/tps", controllers.GetOrganizationsTPSController)

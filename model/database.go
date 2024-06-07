@@ -202,7 +202,7 @@ func (c *PostgreDb) QueryData() error {
 func (c *PostgreDb) QueryLatency() (config.LatencyKpi, error) {
 	fmt.Print("query data")
 	var data config.LatencyKpi
-	rows, err := c.db.Query("WITH Percentile AS (\nSELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5000) AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions) AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5000) > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions)) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
+	rows, err := c.db.Query("WITH Percentile AS (\n    SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n),\nStats AS (\n    SELECT\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE latency < 5000) AS count_latency_below_5\n    FROM transactions\n)\nSELECT\n    s.count_latency_below_5,\n    p.percentile_95 AS latency_95th_percentile,\n    s.total_records,\n    CASE\n        WHEN s.count_latency_below_5 > (p.percentile_95 * 0.95 * s.total_records) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Stats s, Percentile p")
 	if err != nil {
 		fmt.Printf("Loi get db", err)
 		return data, err
