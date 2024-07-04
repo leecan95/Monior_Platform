@@ -4,6 +4,7 @@ import (
 	"Monitor_Platform/config"
 	"Monitor_Platform/model"
 	"Monitor_Platform/routes"
+	"Monitor_Platform/services"
 	"fmt"
 	"time"
 )
@@ -18,10 +19,9 @@ func main() {
 	go func() {
 		for {
 			GetCpuUsage()
-			//services.MonitorKpiApi(db)
-			//db.QueryData()
-			//db2.QueryLatency()
-			time.Sleep(60 * time.Second)
+			services.SetCpuPercentUser()
+			services.SetRamPercentUsage()
+			time.Sleep(120 * time.Second)
 		}
 	}()
 	go func() {
@@ -40,5 +40,5 @@ func main() {
 
 }
 func GetCpuUsage() {
-	fmt.Print("Monitor 08042024\n")
+	fmt.Print("Monitor 14062024\n")
 }

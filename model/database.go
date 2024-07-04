@@ -31,9 +31,8 @@ CREATE TABLE place (
 )`
 
 var Schema2 = `
-CREATE TABLE cpuUsage (
-    id SERIAL PRIMARY KEY,
-    cpu_id INT,
+CREATE TABLE cpuusage (
+	server text,
     value FLOAT,
     timestamp timestamptz DEFAULT current_timestamp
 )`
@@ -42,6 +41,14 @@ var Schema3 = `
 CREATE TABLE kpimodule (
     pod text,
     value FLOAT,
+    timestamp timestamptz DEFAULT current_timestamp
+)`
+
+var Schema4 = `
+CREATE TABLE ramusage (
+    server text,
+    total FLOAT,
+    avail FLOAT,
     timestamp timestamptz DEFAULT current_timestamp
 )`
 
@@ -532,7 +539,7 @@ func (c *PostgreDb) QueryRequestLoginCount() (config.SuccessKpi, error) {
 func (c *PostgreDb) QuerySuccessRequestLoginCount() (config.SuccessKpi, error) {
 	fmt.Print("query request data")
 	var data config.SuccessKpi
-	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\nWHERE response_body NOT LIKE '%\"code\"%'\n    AND url = '/app/vtracking/login'")
+	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\nWHERE response_body NOT LIKE '%\"code\":0%'\n    AND url = '/app/vtracking/login'")
 	if err != nil {
 		fmt.Printf("Loi get db", err)
 		return data, err
@@ -763,6 +770,149 @@ func (c *PostgreDb) SetDowntimeDB(pod string, downtime, total uint64) {
 	} else {
 		log.Println("Data inserted successfully into PostgreSQL")
 	}
+}
+
+func (c *PostgreDb) SetCpuUsage(server string, value uint64) {
+
+	created_time := time.Now()
+	query := `WITH inserted AS (
+		INSERT INTO cpuusage (server, value, timestamp)
+		VALUES ($1, $2, $3)
+		RETURNING ctid
+	), delete_oldest AS (
+		DELETE FROM cpuusage
+		WHERE ctid IN (
+			SELECT ctid
+			FROM cpuusage
+			ORDER BY timestamp
+			LIMIT 1
+		)
+		AND (SELECT COUNT(*) FROM cpuusage) > 3000
+		RETURNING ctid
+	)
+	SELECT 1`
+	_, err := c.db.Exec(query, server, value, created_time)
+	if err != nil {
+		log.Printf("Failed to insert data into PostgreSQL: %v", err)
+	} else {
+		log.Println("Data inserted successfully into PostgreSQL")
+	}
+}
+
+func SetCpu(server string, value uint64) {
+	var cfg config.DBConfig
+	cfg = LoadDBConfig()
+	db, _ := ConnectNewDB(cfg)
+	db.SetCpuUsage(server, value)
+	defer db.db.Close()
+}
+
+func (c *PostgreDb) SetRamUsage(server string, total uint64, avail uint64) {
+
+	created_time := time.Now()
+	query := `	WITH inserted AS (
+		INSERT INTO ramusage (server, total, avail, timestamp)
+		VALUES ($1, $2, $3, $4)
+		RETURNING ctid
+	), delete_oldest AS (
+		DELETE FROM ramusage
+		WHERE ctid IN (
+			SELECT ctid
+			FROM ramusage
+			ORDER BY timestamp
+			LIMIT 1
+		)
+		AND (SELECT COUNT(*) FROM ramusage) > 3000
+		RETURNING ctid
+	)
+	SELECT 1`
+	_, err := c.db.Exec(query, server, total, avail, created_time)
+	if err != nil {
+		log.Printf("Failed to insert data into PostgreSQL: %v", err)
+	} else {
+		log.Println("Data inserted successfully into PostgreSQL")
+	}
+}
+
+func (c *PostgreDb) GetRamUsage(offset, server int) ([]config.Ramusage, error) {
+	fmt.Print("canlv get ramusage")
+	var data config.Ramusage
+	var ram []config.Ramusage
+	var query string
+	num := offset * server
+	fmt.Sprintf(query, "SELECT * FROM ramusage ORDER BY createdtime DESC LIMIT %d", num)
+	rows, err := c.db.Query(query)
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return ram, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total, avail string
+		var server string
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return ram, err
+		}
+		if err := rows.Scan(&avail); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return ram, err
+		}
+		if err := rows.Scan(&server); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return ram, err
+		}
+		data = config.Ramusage{
+			Server: server,
+			Total:  total,
+			Avail:  avail,
+		}
+		ram = append(ram, data)
+	}
+	return ram, nil
+}
+
+func (c *PostgreDb) GetCpuUsage(offset, server int) ([]config.Cpuusage, error) {
+	fmt.Print("canlv get cpuusage")
+	var data config.Cpuusage
+	var cpu []config.Cpuusage
+	var query string
+	num := offset * server
+	fmt.Sprintf(query, "SELECT * FROM cpuusage ORDER BY createdtime DESC LIMIT %d", num)
+	rows, err := c.db.Query(query)
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return cpu, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var value, server string
+		if err := rows.Scan(&value); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return cpu, err
+		}
+		if err := rows.Scan(&server); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return cpu, err
+		}
+		data = config.Cpuusage{
+			Server: server,
+			Value:  value,
+		}
+		cpu = append(cpu, data)
+	}
+
+	return cpu, nil
+}
+
+func SetRam(server string, total, avail uint64) {
+	var cfg config.DBConfig
+	cfg = LoadDBConfig()
+	db, _ := ConnectNewDB(cfg)
+	db.SetRamUsage(server, total, avail)
+	defer db.db.Close()
 }
 
 func Test(db *sqlx.DB) {

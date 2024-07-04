@@ -21,3 +21,14 @@ type SuccessKpi struct {
 	Api   string  `json:"api"`
 	Value float64 `json:"value"`
 }
+
+type Ramusage struct {
+	Server string `json:"server"`
+	Total  string `json:"total"`
+	Avail  string `json:"avail"`
+}
+
+type Cpuusage struct {
+	Server string `json:"server"`
+	Value  string `json:"value"`
+}

@@ -2,6 +2,7 @@ package services
 
 import (
 	"Monitor_Platform/config"
+	"Monitor_Platform/model"
 	"Monitor_Platform/snmp"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -1083,6 +1084,60 @@ func GetCpuPercentUser(c *gin.Context) []int64 {
 	return sum
 }
 
+func SetCpuPercentUser() {
+	val := GetSNMP(config.Server244, config.SsCpuUser)
+	result := uint64(val.(int))
+	model.SetCpu(config.Server244, result)
+	val = GetSNMP(config.Server245, config.SsCpuUser)
+	result = uint64(val.(int))
+	model.SetCpu(config.Server245, result)
+	val = GetSNMP(config.Server246, config.SsCpuUser)
+	result = uint64(val.(int))
+	model.SetCpu(config.Server246, result)
+	val = GetSNMP(config.Server250, config.SsCpuUser)
+	result = uint64(val.(int))
+	model.SetCpu(config.Server250, result)
+	val = GetSNMP(config.Server251, config.SsCpuUser)
+	result = uint64(val.(int))
+	model.SetCpu(config.Server251, result)
+	val = GetSNMP(config.Server252, config.SsCpuUser)
+	result = uint64(val.(int))
+	model.SetCpu(config.Server252, result)
+}
+
+func SetRamPercentUsage() {
+	val := GetSNMP(config.Server244, config.MemTotalReal)
+	result := uint64(val.(int))
+	val2 := GetSNMP(config.Server244, config.MemAvailReal)
+	avail := uint64(val2.(int))
+	model.SetRam(config.Server244, result, avail)
+	val = GetSNMP(config.Server245, config.MemTotalReal)
+	result = uint64(val.(int))
+	val2 = GetSNMP(config.Server245, config.MemAvailReal)
+	avail = uint64(val2.(int))
+	model.SetRam(config.Server245, result, avail)
+	val = GetSNMP(config.Server246, config.MemTotalReal)
+	result = uint64(val.(int))
+	val2 = GetSNMP(config.Server246, config.MemAvailReal)
+	avail = uint64(val2.(int))
+	model.SetRam(config.Server246, result, avail)
+	val = GetSNMP(config.Server250, config.MemTotalReal)
+	result = uint64(val.(int))
+	val2 = GetSNMP(config.Server250, config.MemAvailReal)
+	avail = uint64(val2.(int))
+	model.SetRam(config.Server250, result, avail)
+	val = GetSNMP(config.Server251, config.MemTotalReal)
+	result = uint64(val.(int))
+	val2 = GetSNMP(config.Server251, config.MemAvailReal)
+	avail = uint64(val2.(int))
+	model.SetRam(config.Server251, result, avail)
+	val = GetSNMP(config.Server252, config.MemTotalReal)
+	result = uint64(val.(int))
+	val2 = GetSNMP(config.Server252, config.MemAvailReal)
+	avail = uint64(val2.(int))
+	model.SetRam(config.Server252, result, avail)
+}
+
 func GetCpuPercentSystem(c *gin.Context) []int64 {
 	var sum []int64
 	val := GetDataSNMP(c, config.Server244, config.SsCpuSystem)
@@ -1175,6 +1230,27 @@ func GetDataSNMP(c *gin.Context, target string, oid string) interface{} {
 	if err2 != nil {
 		log.Printf("Get() err: %v", err2)
 		c.Error(err)
+	}
+
+	return result.Variables[0].Value
+}
+
+func GetSNMP(target string, oid string) interface{} {
+	mu.Lock()
+	defer mu.Unlock()
+	var oids []string
+	oids = append(oids, oid)
+	snmp.Manager.Target = target
+
+	err := snmp.Manager.Connect()
+	if err != nil {
+		log.Printf("Connect() err: %v", err)
+	}
+	defer snmp.Manager.Conn.Close()
+
+	result, err2 := snmp.Manager.Get(oids) // Lấy dữ liệu từ SNMP agent
+	if err2 != nil {
+		log.Printf("Get() err: %v", err2)
 	}
 
 	return result.Variables[0].Value
