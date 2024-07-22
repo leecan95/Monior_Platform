@@ -1446,89 +1446,89 @@ func GetKpiVtrack(c *gin.Context) []KpiData {
 		}
 		sum = append(sum, data)
 	}
-	fmt.Println("check 16")
-	params = "?query=sum(users_api_request_error_count{method=~\"user_vtracking_login\"})"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		c.Error(err)
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		c.Error(err)
-	}
-
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		c.Error(err)
-	}
-	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
-		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
-		evalue, eok = response.Data.Result[0].Value[1].(string)
-		if !eok {
-			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
-			fmt.Println("Chưa có giá trị value")
-			evalue = "0"
-		}
-	} else {
-		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
-		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
-		evalue = "0"
-		eok = false
-	}
-	fmt.Println("check 17")
-	params = "?query=sum(users_api_request_count{method=~\"user_vtracking_login\"})"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		c.Error(err)
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		c.Error(err)
-	}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		c.Error(err)
-	}
-	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
-		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
-		value, ok = response.Data.Result[0].Value[1].(string)
-		if !ok {
-			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
-			fmt.Println("Chưa có giá trị value")
-			value = "0"
-		}
-	} else {
-		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
-		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
-		value = "0"
-		ok = false
-	}
-	if ok && eok {
-		fmt.Println("giá trị value " + value + " " + evalue)
-		data := KpiData{
-			Pod:   "user_login_api",
-			Req:   value,
-			Error: evalue,
-		}
-		sum = append(sum, data)
-	}
-	if !ok || !eok {
-		fmt.Println("khong co gia tri value ")
-		data := KpiData{
-			Pod:   "user_login_api",
-			Req:   "1",
-			Error: "0",
-		}
-		sum = append(sum, data)
-	}
+	//fmt.Println("check 16")
+	//params = "?query=sum(users_api_request_error_count{method=~\"user_vtracking_login\"})"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	c.Error(err)
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	c.Error(err)
+	//}
+	//
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	c.Error(err)
+	//}
+	//if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+	//	// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+	//	evalue, eok = response.Data.Result[0].Value[1].(string)
+	//	if !eok {
+	//		// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+	//		fmt.Println("Chưa có giá trị value")
+	//		evalue = "0"
+	//	}
+	//} else {
+	//	// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+	//	fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+	//	evalue = "0"
+	//	eok = false
+	//}
+	//fmt.Println("check 17")
+	//params = "?query=sum(users_api_request_count{method=~\"user_vtracking_login\"})"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	c.Error(err)
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	c.Error(err)
+	//}
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	c.Error(err)
+	//}
+	//if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+	//	// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+	//	value, ok = response.Data.Result[0].Value[1].(string)
+	//	if !ok {
+	//		// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+	//		fmt.Println("Chưa có giá trị value")
+	//		value = "0"
+	//	}
+	//} else {
+	//	// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+	//	fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+	//	value = "0"
+	//	ok = false
+	//}
+	//if ok && eok {
+	//	fmt.Println("giá trị value " + value + " " + evalue)
+	//	data := KpiData{
+	//		Pod:   "user_login_api",
+	//		Req:   value,
+	//		Error: evalue,
+	//	}
+	//	sum = append(sum, data)
+	//}
+	//if !ok || !eok {
+	//	fmt.Println("khong co gia tri value ")
+	//	data := KpiData{
+	//		Pod:   "user_login_api",
+	//		Req:   "1",
+	//		Error: "0",
+	//	}
+	//	sum = append(sum, data)
+	//}
 	fmt.Println("check 19")
 	params = "?query=sum(attributes_api_request_error_count{method=~\"vtracking_get_attribute_time_series_paging\"})"
 	resp, err = http.Get(url + params)

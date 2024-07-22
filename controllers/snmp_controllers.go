@@ -331,11 +331,11 @@ func GetDiskController(c *gin.Context) {
 		{Server: config.Server120, Total: total[16], Available: avail[16]},
 		{Server: config.Server121, Total: total[17], Available: avail[17]},
 		{Server: config.Server123, Total: total[18], Available: avail[19]},
-		{Server: config.Server124, Total: total[19], Available: avail[19]},
-		{Server: config.Server125, Total: total[20], Available: avail[20]},
-		{Server: config.Server127, Total: total[21], Available: avail[21]},
-		{Server: config.Server128, Total: total[22], Available: avail[22]},
-		{Server: config.Server129, Total: total[23], Available: avail[23]},
+		{Server: config.Server127, Total: total[19], Available: avail[19]},
+		{Server: config.Server128, Total: total[20], Available: avail[20]},
+		{Server: config.Server129, Total: total[21], Available: avail[21]},
+		//{Server: config.Server128, Total: total[22], Available: avail[22]},
+		//{Server: config.Server129, Total: total[23], Available: avail[23]},
 	}
 	c.JSON(200, data)
 }

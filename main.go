@@ -4,6 +4,7 @@ import (
 	"Monitor_Platform/config"
 	"Monitor_Platform/model"
 	"Monitor_Platform/routes"
+	"Monitor_Platform/services"
 	"fmt"
 	"time"
 )
@@ -26,8 +27,9 @@ func main() {
 	}()
 	go func() {
 		for {
-			fmt.Print("08042024\n")
-			time.Sleep(5 * time.Second)
+			time.Sleep(40000 * time.Second)
+			fmt.Print("export report file\n")
+			services.ExportKpiToExcel()
 		}
 
 	}()
@@ -40,5 +42,5 @@ func main() {
 
 }
 func GetCpuUsage() {
-	fmt.Print("Monitor 08042024\n")
+	fmt.Print("Monitor 18072024\n")
 }
