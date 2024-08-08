@@ -26,8 +26,8 @@ func main() {
 	}()
 	go func() {
 		for {
-			fmt.Print("08042024\n")
-			time.Sleep(5 * time.Second)
+			services.ExportKpiToExcel()
+			time.Sleep(1000 * time.Second)
 		}
 
 	}()
@@ -40,5 +40,5 @@ func main() {
 
 }
 func GetCpuUsage() {
-	fmt.Print("Monitor 14062024\n")
+	fmt.Print("Monitor 22072024\n")
 }

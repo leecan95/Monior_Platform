@@ -4,10 +4,13 @@ import (
 	"Monitor_Platform/config"
 	"Monitor_Platform/model"
 	"encoding/json"
+	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"time"
 )
 
 func GetOpsMongo(c *gin.Context) []MongoData {
@@ -457,4 +460,105 @@ func PgRequestTrackingKpi(c *gin.Context) config.SuccessKpi {
 	var data config.SuccessKpi
 	data, _ = model.GetRequestTrackingTotal(c)
 	return data
+}
+
+func ExportKpiToExcel() {
+	var data config.SuccessKpi
+	var d config.LatencyKpi
+	f := excelize.NewFile()
+	defer func() {
+		if err := f.Close(); err != nil {
+			fmt.Println(err)
+		}
+	}()
+	sheetName := "Sheet1"
+	f.SetSheetName(f.GetSheetName(0), sheetName)
+	headers := []string{"Services", "Rate"}
+	for col, header := range headers {
+		cell, _ := excelize.CoordinatesToCellName(col+1, 1)
+		f.SetCellValue(sheetName, cell, header)
+		style, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+		f.SetCellStyle(sheetName, cell, cell, style)
+	}
+	data, _ = model.ExportRequestTotal()
+	f.SetCellValue("Sheet1", "A2", "total services")
+	f.SetCellValue("Sheet1", "B2", data.Value)
+	data, _ = model.ExportRequestLoginTotal()
+	f.SetCellValue("Sheet1", "A3", "login services")
+	f.SetCellValue("Sheet1", "B3", data.Value)
+	data, _ = model.ExportRequestGetImageTotal()
+	f.SetCellValue("Sheet1", "A4", "get images services")
+	f.SetCellValue("Sheet1", "B4", data.Value)
+	data, _ = model.ExportRequestReportTotal()
+	f.SetCellValue("Sheet1", "A4", "report services")
+	f.SetCellValue("Sheet1", "B4", data.Value)
+	data, _ = model.ExportRequestTrackingTotal()
+	f.SetCellValue("Sheet1", "A5", "tracking services")
+	f.SetCellValue("Sheet1", "B5", data.Value)
+	d, _ = model.ExportOverallLatency()
+	f.SetCellValue("Sheet1", "A5", "Latency KPI Overall")
+	style, _ := f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+	f.SetCellStyle(sheetName, "A5", "A5", style)
+	f.SetCellValue("Sheet1", "A6", "Total request")
+	f.SetCellValue("Sheet1", "B6", d.Total)
+	f.SetCellValue("Sheet1", "A7", "Number of requests with a response time less than 5s")
+	f.SetCellValue("Sheet1", "B7", d.Count)
+	f.SetCellValue("Sheet1", "A8", "Percentile Request 5s")
+	f.SetCellValue("Sheet1", "B8", d.Percentile)
+	d, _ = model.ExportLoginLatency()
+	f.SetCellValue("Sheet1", "A9", "Latency KPI Login")
+	style, _ = f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+	f.SetCellStyle(sheetName, "A9", "A9", style)
+	f.SetCellValue("Sheet1", "A10", "Total request")
+	f.SetCellValue("Sheet1", "B10", d.Total)
+	f.SetCellValue("Sheet1", "A11", "Number of requests with a response time less than 5s")
+	f.SetCellValue("Sheet1", "B11", d.Count)
+	f.SetCellValue("Sheet1", "A12", "Percentile Request 5s")
+	f.SetCellValue("Sheet1", "B12", d.Percentile)
+
+	d, _ = model.ExportImageLatency()
+	f.SetCellValue("Sheet1", "A13", "Latency KPI Get Image")
+	style, _ = f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+	f.SetCellStyle(sheetName, "A13", "A13", style)
+	f.SetCellValue("Sheet1", "A14", "Total request")
+	f.SetCellValue("Sheet1", "B14", d.Total)
+	f.SetCellValue("Sheet1", "A15", "Number of requests with a response time less than 5s")
+	f.SetCellValue("Sheet1", "B15", d.Count)
+	f.SetCellValue("Sheet1", "A16", "Percentile Request 5s")
+	f.SetCellValue("Sheet1", "B16", d.Percentile)
+	d, _ = model.ExportTrackingLatency()
+	f.SetCellValue("Sheet1", "A17", "Latency KPI Tracking")
+	style, _ = f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+	f.SetCellStyle(sheetName, "A17", "A17", style)
+	f.SetCellValue("Sheet1", "A18", "Total request")
+	f.SetCellValue("Sheet1", "B18", d.Total)
+	f.SetCellValue("Sheet1", "A19", "Number of requests with a response time less than 5s")
+	f.SetCellValue("Sheet1", "B19", d.Count)
+	f.SetCellValue("Sheet1", "A20", "Percentile Request 5s")
+	f.SetCellValue("Sheet1", "B20", d.Percentile)
+	d, _ = model.ExportReportLatency()
+	f.SetCellValue("Sheet1", "A21", "Latency KPI Report")
+	style, _ = f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+	f.SetCellStyle(sheetName, "A21", "A21", style)
+	f.SetCellValue("Sheet1", "A22", "Total request")
+	f.SetCellValue("Sheet1", "B22", d.Total)
+	f.SetCellValue("Sheet1", "A23", "Number of requests with a response time less than 5s")
+	f.SetCellValue("Sheet1", "B24", d.Count)
+	f.SetCellValue("Sheet1", "A24", "Percentile Request 5s")
+	f.SetCellValue("Sheet1", "B24", d.Percentile)
+
+	// Lấy thời gian hiện tại
+	now := time.Now()
+
+	// Định dạng thời gian thành chuỗi theo định dạng ddmmyyyy
+	formattedTime := now.Format("02012006")
+
+	// Tạo tên file với thời gian
+	fileName := fmt.Sprintf("/mnt/data/KPI_Vtracking_%s.xlsx", formattedTime)
+
+	if err := f.SaveAs(fileName); err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Printf("File saved successfully at: %s\n", fileName) // Log the file path
+	}
 }

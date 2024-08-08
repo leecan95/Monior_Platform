@@ -283,6 +283,15 @@ func GetOverallLatency(c *gin.Context) (config.LatencyKpi, error) {
 	return data, nil
 }
 
+func ExportOverallLatency() (config.LatencyKpi, error) {
+	var cfg config.DBConfig
+	var data config.LatencyKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryLatency()
+	return data, nil
+}
+
 func GetOverallLatencyPool(c *gin.Context) (config.LatencyKpi, error) {
 	var data config.LatencyKpi
 	dbpool, exists := c.Get("dbpool")
@@ -333,6 +342,15 @@ func GetLoginLatency(c *gin.Context) (config.LatencyKpi, error) {
 	return data, nil
 }
 
+func ExportLoginLatency() (config.LatencyKpi, error) {
+	var cfg config.DBConfig
+	var data config.LatencyKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryLoginLatency()
+	return data, nil
+}
+
 func (c *PostgreDb) QueryReportLatency() (config.LatencyKpi, error) {
 	fmt.Print("query data")
 	var data config.LatencyKpi
@@ -364,6 +382,15 @@ func (c *PostgreDb) QueryReportLatency() (config.LatencyKpi, error) {
 }
 
 func GetReportLatency(c *gin.Context) (config.LatencyKpi, error) {
+	var cfg config.DBConfig
+	var data config.LatencyKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryReportLatency()
+	return data, nil
+}
+
+func ExportReportLatency() (config.LatencyKpi, error) {
 	var cfg config.DBConfig
 	var data config.LatencyKpi
 	cfg = LoadDBConfig()
@@ -411,6 +438,15 @@ func GetImageLatency(c *gin.Context) (config.LatencyKpi, error) {
 	return data, nil
 }
 
+func ExportImageLatency() (config.LatencyKpi, error) {
+	var cfg config.DBConfig
+	var data config.LatencyKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryGetimageLatency()
+	return data, nil
+}
+
 func (c *PostgreDb) QueryTrackingLatency() (config.LatencyKpi, error) {
 	fmt.Print("query data")
 	var data config.LatencyKpi
@@ -442,6 +478,15 @@ func (c *PostgreDb) QueryTrackingLatency() (config.LatencyKpi, error) {
 }
 
 func GetTrackingLatency(c *gin.Context) (config.LatencyKpi, error) {
+	var cfg config.DBConfig
+	var data config.LatencyKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryTrackingLatency()
+	return data, nil
+}
+
+func ExportTrackingLatency() (config.LatencyKpi, error) {
 	var cfg config.DBConfig
 	var data config.LatencyKpi
 	cfg = LoadDBConfig()
@@ -499,6 +544,20 @@ func (c *PostgreDb) QuerySuccessRequestCount() (config.SuccessKpi, error) {
 }
 
 func GetRequestTotal(c *gin.Context) (config.SuccessKpi, error) {
+	var cfg config.DBConfig
+	var total, count, result config.SuccessKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	total, _ = db2.QueryRequestCount()
+	count, _ = db2.QuerySuccessRequestCount()
+	result = config.SuccessKpi{
+		Api:   total.Api,
+		Value: (count.Value / total.Value) * 100,
+	}
+	return result, nil
+}
+
+func ExportRequestTotal() (config.SuccessKpi, error) {
 	var cfg config.DBConfig
 	var total, count, result config.SuccessKpi
 	cfg = LoadDBConfig()
@@ -574,6 +633,20 @@ func GetRequestLoginTotal(c *gin.Context) (config.SuccessKpi, error) {
 	return result, nil
 }
 
+func ExportRequestLoginTotal() (config.SuccessKpi, error) {
+	var cfg config.DBConfig
+	var total, count, result config.SuccessKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	total, _ = db2.QueryRequestLoginCount()
+	count, _ = db2.QuerySuccessRequestLoginCount()
+	result = config.SuccessKpi{
+		Api:   total.Api,
+		Value: (count.Value / total.Value) * 100,
+	}
+	return result, nil
+}
+
 func (c *PostgreDb) QueryRequestReportCount() (config.SuccessKpi, error) {
 	fmt.Print("query request data")
 	var data config.SuccessKpi
@@ -623,6 +696,20 @@ func (c *PostgreDb) QuerySuccessRequestReportCount() (config.SuccessKpi, error) 
 }
 
 func GetRequestReportTotal(c *gin.Context) (config.SuccessKpi, error) {
+	var cfg config.DBConfig
+	var total, count, result config.SuccessKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	total, _ = db2.QueryRequestReportCount()
+	count, _ = db2.QuerySuccessRequestReportCount()
+	result = config.SuccessKpi{
+		Api:   total.Api,
+		Value: (count.Value / total.Value) * 100,
+	}
+	return result, nil
+}
+
+func ExportRequestReportTotal() (config.SuccessKpi, error) {
 	var cfg config.DBConfig
 	var total, count, result config.SuccessKpi
 	cfg = LoadDBConfig()
@@ -698,6 +785,20 @@ func GetRequestGetImageTotal(c *gin.Context) (config.SuccessKpi, error) {
 	return result, nil
 }
 
+func ExportRequestGetImageTotal() (config.SuccessKpi, error) {
+	var cfg config.DBConfig
+	var total, count, result config.SuccessKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	total, _ = db2.QueryRequestGetImageCount()
+	count, _ = db2.QuerySuccessRequestGetImageCount()
+	result = config.SuccessKpi{
+		Api:   total.Api,
+		Value: (count.Value / total.Value) * 100,
+	}
+	return result, nil
+}
+
 func (c *PostgreDb) QueryRequestTrackingCount() (config.SuccessKpi, error) {
 	fmt.Print("query request data")
 	var data config.SuccessKpi
@@ -747,6 +848,20 @@ func (c *PostgreDb) QuerySuccessRequestTrackingCount() (config.SuccessKpi, error
 }
 
 func GetRequestTrackingTotal(c *gin.Context) (config.SuccessKpi, error) {
+	var cfg config.DBConfig
+	var total, count, result config.SuccessKpi
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	total, _ = db2.QueryRequestTrackingCount()
+	count, _ = db2.QuerySuccessRequestTrackingCount()
+	result = config.SuccessKpi{
+		Api:   total.Api,
+		Value: (count.Value / total.Value) * 100,
+	}
+	return result, nil
+}
+
+func ExportRequestTrackingTotal() (config.SuccessKpi, error) {
 	var cfg config.DBConfig
 	var total, count, result config.SuccessKpi
 	cfg = LoadDBConfig()
