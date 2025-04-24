@@ -10,9 +10,9 @@ type MemSnmpAll struct {
 }
 
 type MemAll struct {
-	Server    string      `json:"server"`
-	Available interface{} `json:"available"`
-	Total     interface{} `json:"total"`
+	Server    string `json:"server"`
+	Available int64  `json:"available"`
+	Total     int64  `json:"total"`
 }
 
 type Disk struct {

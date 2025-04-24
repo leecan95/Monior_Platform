@@ -21,3 +21,8 @@ type SuccessKpi struct {
 	Api   string  `json:"api"`
 	Value float64 `json:"value"`
 }
+
+type dataLicense struct {
+	Api   string  `json:"api"`
+	Value float64 `json:"value"`
+}

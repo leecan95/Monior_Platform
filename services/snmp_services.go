@@ -5,11 +5,17 @@ import (
 	"Monitor_Platform/snmp"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/gosnmp/gosnmp"
 	"log"
 	"sync"
+	"time"
 )
 
 var mu sync.Mutex
+
+const maxConcurrentSNMP = 20
+
+var snmpClients = make(map[string]*gosnmp.GoSNMP)
 
 func GetValueFromOID(c *gin.Context, oid []string) interface{} {
 	// Kết nối tới SNMP agent
@@ -28,562 +34,748 @@ func GetValueFromOID(c *gin.Context, oid []string) interface{} {
 	return result
 }
 
-func GetAllMemInfo(c *gin.Context) []int64 {
-	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.MemTotalReal)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.MemTotalReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+func getSNMPClient(target string) (*gosnmp.GoSNMP, error) {
+    if target == "" {
+        return nil, fmt.Errorf("empty target address")
+    }
+
+    mu.Lock()
+    defer mu.Unlock()
+
+    // Nếu đã có kết nối, dùng lại
+    if client, exists := snmpClients[target]; exists {
+        // Check if the connection is still valid
+        if err := client.Connect(); err == nil {
+            // Connection is still valid, use it
+            return client, nil
+        }
+        // Connection is invalid, delete it and create a new one
+        delete(snmpClients, target)
+    }
+
+    // Tạo kết nối SNMP mới
+    client := &gosnmp.GoSNMP{
+        Target:             target,
+        Port:               161,
+        Version:            gosnmp.Version2c,
+        Community:          "public",
+        Timeout:            time.Second * 2,
+        Retries:            2,
+        ExponentialTimeout: true, // Add exponential backoff for timeouts
+    }
+
+    err := client.Connect()
+    if err != nil {
+        log.Printf("SNMP Connect() err for %s: %v", target, err)
+        return nil, err
+    }
+
+    snmpClients[target] = client
+    return client, nil
+}
+func GetAllMemInfo(c *gin.Context) ([]int64, []string) {
+    var sum []int64
+    var svs []string
+    var wg sync.WaitGroup
+    var svsMutex sync.Mutex // Add mutex for thread-safe server list updates
+    results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+    semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+    for _, server := range config.Servers {
+        // Skip empty server addresses
+        if server == "" {
+            log.Printf("[WARNING] Empty server address found in config.Servers")
+            continue
+        }
+        
+        wg.Add(1)
+        semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+        go func(server string) {
+            defer wg.Done()
+            defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+            client, err := getSNMPClient(server)
+            if err != nil {
+                log.Printf("Failed to get SNMP client for %s: %v", server, err)
+                return
+            }
+
+            var resultVal interface{}
+            var fetchErr error
+            
+            for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+                result, err := client.Get([]string{config.MemTotalReal})
+                if err == nil && len(result.Variables) > 0 && result.Variables[0].Value != nil {
+                    // Use mutex to safely update the server list
+                    svsMutex.Lock()
+                    svs = append(svs, server)
+                    svsMutex.Unlock()
+                    
+                    resultVal = result.Variables[0].Value
+                    fetchErr = nil
+                    break
+                }
+                
+                fetchErr = err
+                log.Printf("[WARNING] Retry %d: Failed SNMP from %s: %v", i+1, server, err)
+                
+                // Instead of client.Close(), reconnect the client
+                time.Sleep(500 * time.Millisecond)
+                // Reconnect by getting a fresh client
+                client, err = getSNMPClient(server)
+                if err != nil {
+                    log.Printf("Failed to reconnect SNMP client for %s: %v", server, err)
+                }
+            }
+
+            if fetchErr != nil {
+                log.Printf("[ERROR] SNMP Get failed from %s after 3 retries: %v", server, fetchErr)
+                return
+            }
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case uint:
+				result = int64(v)
+			case uint64:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
-func GetAvailMemInfo(c *gin.Context) []int64 {
+func GetAvailMemInfo(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.MemAvailReal)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.MemAvailReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.MemAvailReal})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
-func GetMemCacheInfo(c *gin.Context) []int64 {
+func GetMemCacheInfo(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.MemCacheReal)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.MemCacheReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.MemCacheReal})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
-func GetMemBufferInfo(c *gin.Context) []int64 {
+func GetMemBufferInfo(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.MemBufferReal)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.MemBufferReal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.MemBufferReal})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
-func GetCpuRawUser(c *gin.Context) []int64 {
+func GetCpuRawUser(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.SsCpuRawUser)
-	result := int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.SsCpuRawUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.SsCpuRawUser)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.SsCpuRawUser})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
+
 }
 
 func GetCpuRawNice(c *gin.Context) []int64 {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server244, config.SsCpuRawNice)
-	fmt.Printf("102 gia tri %v\n", val)
-	result := int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server245, config.SsCpuRawNice)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server246, config.SsCpuRawNice)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server250, config.SsCpuRawNice)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server251, config.SsCpuRawNice)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server252, config.SsCpuRawNice)
-	result = int64(val.(uint))
-	sum = append(sum, result)
+	var result int64
+	var ok bool
+	var val interface{}
+
+	for _, server := range config.Servers {
+		val = GetDataSNMP(c, server, config.SsCpuRawNice)
+		if val == nil {
+			log.Printf("[ERROR] Failed to fetch SNMP from %s\n", server)
+		}
+		result, ok = val.(int64)
+		if !ok {
+			log.Printf("[ERROR] Invalid SNMP data type from %s\n", server)
+			continue
+		}
+		result = int64(val.(int))
+		sum = append(sum, result)
+	}
+	//
+	//val := GetDataSNMP(c, config.Server244, config.SsCpuRawNice)
+	//fmt.Printf("102 gia tri %v\n", val)
+	//result := int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server245, config.SsCpuRawNice)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server246, config.SsCpuRawNice)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server250, config.SsCpuRawNice)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server251, config.SsCpuRawNice)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server252, config.SsCpuRawNice)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
 	return sum
 }
 
 func GetCpuRawSystem(c *gin.Context) []int64 {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server244, config.SsCpuRawSystem)
-	fmt.Printf("126 gia tri %v\n", val)
-	result := int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server245, config.SsCpuRawSystem)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server246, config.SsCpuRawSystem)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server250, config.SsCpuRawSystem)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server251, config.SsCpuRawSystem)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server252, config.SsCpuRawSystem)
-	result = int64(val.(uint))
-	sum = append(sum, result)
+	var result int64
+	var ok bool
+	var val interface{}
+
+	for _, server := range config.Servers {
+		val = GetDataSNMP(c, server, config.SsCpuRawSystem)
+		if val == nil {
+			log.Printf("[ERROR] Failed to fetch SNMP from %s\n", server)
+		}
+		result, ok = val.(int64)
+		if !ok {
+			log.Printf("[ERROR] Invalid SNMP data type from %s\n", server)
+			continue
+		}
+		result = int64(val.(int))
+		sum = append(sum, result)
+	}
+	//val := GetDataSNMP(c, config.Server244, config.SsCpuRawSystem)
+	//fmt.Printf("126 gia tri %v\n", val)
+	//result := int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server245, config.SsCpuRawSystem)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server246, config.SsCpuRawSystem)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server250, config.SsCpuRawSystem)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server251, config.SsCpuRawSystem)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server252, config.SsCpuRawSystem)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
 	return sum
 }
 
-func GetCpuRawIdle(c *gin.Context) []int64 {
+func GetCpuRawIdle(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.SsCpuRawIdle)
-	result := int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.SsCpuRawIdle)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.SsCpuRawIdle)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.SsCpuRawIdle})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
 func GetCpuRawWait(c *gin.Context) []int64 {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server244, config.SsCpuRawWait)
-	fmt.Printf("174 gia tri %v\n", val)
-	result := int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server245, config.SsCpuRawWait)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server246, config.SsCpuRawWait)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server250, config.SsCpuRawWait)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server251, config.SsCpuRawWait)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server252, config.SsCpuRawWait)
-	result = int64(val.(uint))
-	sum = append(sum, result)
+	var result int64
+	var ok bool
+	var val interface{}
+
+	for _, server := range config.Servers {
+		val = GetDataSNMP(c, server, config.SsCpuRawWait)
+		if val == nil {
+			log.Printf("[ERROR] Failed to fetch SNMP from %s\n", server)
+		}
+		result, ok = val.(int64)
+		if !ok {
+			log.Printf("[ERROR] Invalid SNMP data type from %s\n", server)
+			continue
+		}
+		result = int64(val.(int))
+		sum = append(sum, result)
+	}
+	//val := GetDataSNMP(c, config.Server244, config.SsCpuRawWait)
+	//fmt.Printf("174 gia tri %v\n", val)
+	//result := int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server245, config.SsCpuRawWait)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server246, config.SsCpuRawWait)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server250, config.SsCpuRawWait)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server251, config.SsCpuRawWait)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
+	//val = GetDataSNMP(c, config.Server252, config.SsCpuRawWait)
+	//result = int64(val.(uint))
+	//sum = append(sum, result)
 	return sum
 }
 
-func GetCpuRawKernel(c *gin.Context) []int64 {
+func GetCpuRawKernel(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server244, config.SsCpuRawKernel)
-	fmt.Printf("198 gia tri %v\n", val)
-	result := int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server245, config.SsCpuRawKernel)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server246, config.SsCpuRawKernel)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server250, config.SsCpuRawKernel)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server251, config.SsCpuRawKernel)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server252, config.SsCpuRawKernel)
-	result = int64(val.(uint))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.SsCpuRawKernel})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
 func GetCpuRawInterrupt(c *gin.Context) []int64 {
@@ -634,571 +826,695 @@ func GetCpuRawSoftIrq(c *gin.Context) []int64 {
 	return sum
 }
 
-func GetDiskTotal(c *gin.Context) []int64 {
-	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.DskTotalNew)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.DskTotalNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.DskTotalNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.DskTotalNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.DskTotalNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.DskTotalNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.DskTotalNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.DskTotalNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	//val = GetDataSNMP(c, config.Server124, config.DskTotal)
-	//result = int64(val.(int))
-	//sum = append(sum, result)
-	//val = GetDataSNMP(c, config.Server125, config.DskTotal)
-	//result = int64(val.(int))
-	//sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.DskTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+func GetDiskTotal(c *gin.Context) ([]int64, []string) {
+    var sum []int64
+    var svs []string
+    var wg sync.WaitGroup
+    var svsMutex sync.Mutex // Add mutex for thread-safe server list updates
+    results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+    semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+    for _, server := range config.Servers {
+        // Skip empty server addresses
+        if server == "" {
+            log.Printf("[WARNING] Empty server address found in config.Servers")
+            continue
+        }
+        
+        wg.Add(1)
+        semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+        go func(server string) {
+            defer wg.Done()
+            defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+            client, err := getSNMPClient(server)
+            if err != nil {
+                log.Printf("Failed to get SNMP client for %s: %v", server, err)
+                return
+            }
+
+            var resultVal interface{}
+            var fetchErr error
+            
+            for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+                result, err := client.Get([]string{config.DskTotalNew})
+                if err == nil && len(result.Variables) > 0 && result.Variables[0].Value != nil {
+                    // Use mutex to safely update the server list
+                    svsMutex.Lock()
+                    svs = append(svs, server)
+                    svsMutex.Unlock()
+                    
+                    resultVal = result.Variables[0].Value
+                    fetchErr = nil
+                    break
+                }
+                
+                fetchErr = err
+                log.Printf("[WARNING] Retry %d: Failed SNMP from %s: %v", i+1, server, err)
+                
+                // Reconnect by getting a fresh client
+                time.Sleep(500 * time.Millisecond)
+                client, err = getSNMPClient(server)
+                if err != nil {
+                    log.Printf("Failed to reconnect SNMP client for %s: %v", server, err)
+                }
+            }
+
+            if fetchErr != nil {
+                log.Printf("[ERROR] SNMP Get failed from %s after 3 retries: %v", server, fetchErr)
+                return
+            }
+
+            if resultVal == nil {
+                log.Printf("[WARNING] SNMP response is nil from %s", server)
+                return
+            }
+
+            // Kiểm tra kiểu dữ liệu trả về
+            var result int64
+            switch v := resultVal.(type) {
+            case int64:
+                result = v
+            case int:
+                result = int64(v)
+            case uint:
+                result = int64(v)
+            case uint64:
+                result = int64(v)
+            case float64:
+                result = int64(v)
+            case string:
+                log.Printf("[INFO] SNMP data from %s is string: %s", server, v)
+                return
+            case []byte:
+                log.Printf("[INFO] SNMP data from %s is []byte: %s", server, string(v))
+                return
+            default:
+                log.Printf("[ERROR] Invalid SNMP data type from %s: %T", server, v)
+                return
+            }
+
+            results <- result // Đưa dữ liệu vào channel
+        }(server)
+    }
+
+    // Đợi tất cả goroutines hoàn thành
+    wg.Wait()
+    close(results)
+
+    // Lấy dữ liệu từ channel
+    for res := range results {
+        sum = append(sum, res)
+    }
+
+    return sum, svs
 }
 
-func GetDiskAvail(c *gin.Context) []int64 {
-	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.DskAvailNew)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.DskAvailNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.DskAvailNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.DskAvailNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.DskAvailNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.DskAvailNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.DskAvailNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.DskAvailNew)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	//val = GetDataSNMP(c, config.Server124, config.DskAvail)
-	//result = int64(val.(int))
-	//sum = append(sum, result)
-	//val = GetDataSNMP(c, config.Server125, config.DskAvail)
-	//result = int64(val.(int))
-	//sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.DskAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+func GetDiskAvail(c *gin.Context) ([]int64, []string) {
+    var sum []int64
+    var svs []string
+    var wg sync.WaitGroup
+    var svsMutex sync.Mutex // Add mutex for thread-safe server list updates
+    results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+    semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+    for _, server := range config.Servers {
+        // Skip empty server addresses
+        if server == "" {
+            log.Printf("[WARNING] Empty server address found in config.Servers")
+            continue
+        }
+        
+        wg.Add(1)
+        semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+        go func(server string) {
+            defer wg.Done()
+            defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+            client, err := getSNMPClient(server)
+            if err != nil {
+                log.Printf("Failed to get SNMP client for %s: %v", server, err)
+                return
+            }
+
+            var resultVal interface{}
+            var fetchErr error
+            
+            for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+                // Fixed: Using the correct OID for available disk space
+                result, err := client.Get([]string{config.DskAvailNew})
+                if err == nil && len(result.Variables) > 0 && result.Variables[0].Value != nil {
+                    // Use mutex to safely update the server list
+                    svsMutex.Lock()
+                    svs = append(svs, server)
+                    svsMutex.Unlock()
+                    
+                    resultVal = result.Variables[0].Value
+                    fetchErr = nil
+                    break
+                }
+                
+                fetchErr = err
+                log.Printf("[WARNING] Retry %d: Failed SNMP from %s: %v", i+1, server, err)
+                
+                // Reconnect by getting a fresh client
+                time.Sleep(500 * time.Millisecond)
+                client, err = getSNMPClient(server)
+                if err != nil {
+                    log.Printf("Failed to reconnect SNMP client for %s: %v", server, err)
+                }
+            }
+
+            if fetchErr != nil {
+                log.Printf("[ERROR] SNMP Get failed from %s after 3 retries: %v", server, fetchErr)
+                return
+            }
+
+            if resultVal == nil {
+                log.Printf("[WARNING] SNMP response is nil from %s", server)
+                return
+            }
+
+            // Kiểm tra kiểu dữ liệu trả về
+            var result int64
+            switch v := resultVal.(type) {
+            case int64:
+                result = v
+            case int:
+                result = int64(v)
+            case uint:
+                result = int64(v)
+            case uint64:
+                result = int64(v)
+            case float64:
+                result = int64(v)
+            case string:
+                log.Printf("[INFO] SNMP data from %s is string: %s", server, v)
+                return
+            case []byte:
+                log.Printf("[INFO] SNMP data from %s is []byte: %s", server, string(v))
+                return
+            default:
+                log.Printf("[ERROR] Invalid SNMP data type from %s: %T", server, v)
+                return
+            }
+
+            results <- result // Đưa dữ liệu vào channel
+        }(server)
+    }
+
+    // Đợi tất cả goroutines hoàn thành
+    wg.Wait()
+    close(results)
+
+    // Lấy dữ liệu từ channel
+    for res := range results {
+        sum = append(sum, res)
+    }
+
+    return sum, svs
 }
 
-func GetIoReceiveData(c *gin.Context) []int64 {
+func GetIoReceiveData(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server244, config.IOReceive)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server245, config.IOReceive)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server246, config.IOReceive)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server250, config.IOReceive)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server251, config.IOReceive)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server252, config.IOReceive)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.IOReceive})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
-func GetIoSentData(c *gin.Context) []int64 {
+func GetIoSentData(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.IOSent)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.IOSent)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.IOSent})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
-func GetMemSwapTotal(c *gin.Context) []int64 {
+func GetMemSwapTotal(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.MemSwapTotal)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.MemSwapTotal)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.MemSwapTotal})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
-func GetMemSwapAvail(c *gin.Context) []int64 {
+func GetMemSwapAvail(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.MemSwapAvail)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.MemSwapAvail)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.MemSwapAvail})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
-func GetCpuPercentUser(c *gin.Context) []int64 {
+func GetCpuPercentUser(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.SsCpuUser)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.SsCpuUser)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.SsCpuUser})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
-func GetCpuPercentSystem(c *gin.Context) []int64 {
+func GetCpuPercentSystem(c *gin.Context) ([]int64, []string) {
 	var sum []int64
-	val := GetDataSNMP(c, config.Server100, config.SsCpuSystem)
-	result := int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server101, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server102, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server104, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server105, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server106, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server108, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server109, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server110, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server112, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server113, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server114, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server116, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server117, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server118, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server119, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server120, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server121, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server123, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server124, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server125, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server127, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server128, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	val = GetDataSNMP(c, config.Server129, config.SsCpuSystem)
-	result = int64(val.(int))
-	sum = append(sum, result)
-	return sum
+	var svs []string
+	var wg sync.WaitGroup
+	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
+
+	for _, server := range config.Servers {
+		wg.Add(1)
+		semaphore <- struct{}{} // Giữ chỗ trong semaphore
+
+		go func(server string) {
+			defer wg.Done()
+			defer func() { <-semaphore }() // Giải phóng chỗ trong semaphore
+
+			client, err := getSNMPClient(server)
+			if err != nil {
+				log.Printf("Failed to get SNMP client for %s: %v", server, err)
+				return
+			}
+
+			var resultVal interface{}
+			for i := 0; i < 3; i++ { // Thử lại tối đa 3 lần
+				result, err := client.Get([]string{config.SsCpuSystem})
+				if err == nil && len(result.Variables) > 0 {
+					svs = append(svs, server)
+					resultVal = result.Variables[0].Value
+					break
+				}
+				log.Printf("[WARNING] Retry %d: Failed SNMP from %s\n", i+1, server)
+				time.Sleep(500 * time.Millisecond)
+			}
+
+			if err != nil {
+				log.Printf("[ERROR] SNMP Get failed from %s: %v\n", server, err)
+				return
+			}
+
+			if resultVal == nil {
+				log.Printf("[WARNING] SNMP response is nil from %s\n", server)
+				return
+			}
+
+			// Kiểm tra kiểu dữ liệu trả về
+			var result int64
+			switch v := resultVal.(type) {
+			case int64:
+				result = v
+			case int:
+				result = int64(v)
+			case float64:
+				result = int64(v)
+			case string:
+				log.Printf("[INFO] SNMP data from %s is string: %s\n", server, v)
+				return
+			case []byte:
+				log.Printf("[INFO] SNMP data from %s is []byte: %s\n", server, string(v))
+				return
+			default:
+				log.Printf("[ERROR] Invalid SNMP data type from %s: %T\n", server, v)
+				return
+			}
+
+			results <- result // Đưa dữ liệu vào channel
+		}(server)
+	}
+
+	// Đợi tất cả goroutines hoàn thành
+	wg.Wait()
+	close(results)
+
+	// Lấy dữ liệu từ channel
+	for res := range results {
+		sum = append(sum, res)
+	}
+
+	return sum, svs
 }
 
 func GetDataSNMP(c *gin.Context, target string, oid string) interface{} {
 	mu.Lock()
 	defer mu.Unlock()
+
 	var oids []string
 	oids = append(oids, oid)
 	snmp.Manager.Target = target
@@ -1206,14 +1522,22 @@ func GetDataSNMP(c *gin.Context, target string, oid string) interface{} {
 	err := snmp.Manager.Connect()
 	if err != nil {
 		log.Printf("Connect() err: %v", err)
-		c.Error(err)
+		c.Error(err) // CHỈ gọi c.Error nếu err != nil
+		return nil
 	}
 	defer snmp.Manager.Conn.Close()
 
 	result, err2 := snmp.Manager.Get(oids) // Lấy dữ liệu từ SNMP agent
 	if err2 != nil {
 		log.Printf("Get() err: %v", err2)
-		c.Error(err)
+		c.Error(err2) // CHỈ gọi c.Error nếu err2 != nil
+		return nil
+	}
+
+	// Kiểm tra nếu không có dữ liệu trả về
+	if len(result.Variables) == 0 {
+		log.Printf("SNMP response empty from %s", target)
+		return nil
 	}
 
 	return result.Variables[0].Value

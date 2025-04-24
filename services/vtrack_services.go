@@ -1277,7 +1277,7 @@ func GetKpiVtrack(c *gin.Context) []KpiData {
 		}
 		sum = append(sum, data)
 	}
-	params = "?query=sum(vtracking_report_api_request_error_count{method=~\"VTrackingReportOverviewV3\"})"
+	params = "?query=sum(vtracking_report_api_request_error_count{method=~\"VTrackingReportOverviewV4\"})"
 	resp, err = http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
@@ -1311,7 +1311,7 @@ func GetKpiVtrack(c *gin.Context) []KpiData {
 		evalue = "0"
 	}
 	fmt.Println("check 4")
-	params = "?query=sum(vtracking_report_api_request_count{method=~\"VTrackingReportOverviewV3\"})"
+	params = "?query=sum(vtracking_report_api_request_count{method=~\"VTrackingReportOverviewV4\"})"
 	resp, err = http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
@@ -1874,6 +1874,98 @@ func GetKpiVtrack(c *gin.Context) []KpiData {
 
 }
 
+func GetRequestKPIReport(c *gin.Context) KpiData {
+	var response PodReponse
+	var data KpiData
+	var value, evalue string
+	var ok, eok bool
+	url := config.PrometheusUrl
+	params := "?query=sum(vtracking_report_api_request_error_count{method=~\"VTrackingReportOverviewV4\"})"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 1")
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 2")
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 3")
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		evalue, eok = response.Data.Result[0].Value[1].(string)
+		if !eok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			evalue = "0"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		eok = false
+		evalue = "0"
+	}
+	fmt.Println("check 4")
+	params = "?query=sum(vtracking_report_api_request_count{method=~\"VTrackingReportOverviewV4\"})"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 5")
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 6")
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 8")
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		value, ok = response.Data.Result[0].Value[1].(string)
+		if !ok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			value = "1"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		value = "1"
+	}
+	if ok && eok {
+		fmt.Println("giá trị value " + value + " " + evalue)
+		data = KpiData{
+			Pod:   "vtracking_report_overview_api",
+			Req:   value,
+			Error: evalue,
+		}
+	}
+	if !ok || !eok {
+		fmt.Println("khong co gia tri evalue ")
+		data = KpiData{
+			Pod:   "vtracking_report_overview_api",
+			Req:   "1",
+			Error: "0",
+		}
+	}
+
+	return data
+}
+
 func GetDownTimeVtrack(c *gin.Context) []KpiData {
 	var response PodReponse
 	var sum []KpiData
@@ -2046,57 +2138,57 @@ func GetKpiLatencyVtrack(c *gin.Context) []KpiData {
 		//}
 		//sum = append(sum, data)
 	}
-	fmt.Println("check 23")
-	params = "?query=(sum(vtracking_report_api_request_latency_microseconds_sum{method=\"VTrackingReportOverviewV3\"})*1000)/sum(kube_pod_start_time{pod=~\"^vtracking.*\"})"
-	resp, err = http.Get(url + params)
-	if err != nil {
-		log.Printf("error in services %s", err)
-		c.Error(err)
-	}
-
-	body, err = ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Printf("error reading response body: %s", err)
-		c.Error(err)
-	}
-	err = json.Unmarshal(body, &response)
-	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
-		c.Error(err)
-	}
-	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
-		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
-		fvalue, fok := response.Data.Result[0].Value[1].(float64)
-		roundedValue := math.Round(fvalue)
-		value = strconv.FormatFloat(roundedValue, 'f', -1, 64)
-		fmt.Println("giá trị value " + value)
-		data := KpiData{
-			Pod:   "report_overview_latency",
-			Req:   "1",
-			Error: value,
-		}
-		if !fok {
-			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
-			fmt.Println("Chưa có giá trị value")
-			value = "0"
-			data = KpiData{
-				Pod:   "report_overview_latency",
-				Req:   "1",
-				Error: value,
-			}
-		}
-		sum = append(sum, data)
-	} else {
-		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
-		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
-		value = "0"
-		//data := KpiData{
-		//	Pod:   "user_login_latency",
-		//	Req:   "1",
-		//	Error: value,
-		//}
-		//sum = append(sum, data)
-	}
+	//fmt.Println("check 23")
+	//params = "?query=(sum(vtracking_report_api_request_latency_microseconds_sum{method=\"VTrackingReportOverviewV3\"})*1000)/sum(kube_pod_start_time{pod=~\"^vtracking.*\"})"
+	//resp, err = http.Get(url + params)
+	//if err != nil {
+	//	log.Printf("error in services %s", err)
+	//	c.Error(err)
+	//}
+	//
+	//body, err = ioutil.ReadAll(resp.Body)
+	//if err != nil {
+	//	log.Printf("error reading response body: %s", err)
+	//	c.Error(err)
+	//}
+	//err = json.Unmarshal(body, &response)
+	//if err != nil {
+	//	log.Printf("error unmarshaling JSON: %s", err)
+	//	c.Error(err)
+	//}
+	//if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+	//	// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+	//	fvalue, fok := response.Data.Result[0].Value[1].(float64)
+	//	roundedValue := math.Round(fvalue)
+	//	value = strconv.FormatFloat(roundedValue, 'f', -1, 64)
+	//	fmt.Println("giá trị value " + value)
+	//	data := KpiData{
+	//		Pod:   "report_overview_latency",
+	//		Req:   "1",
+	//		Error: value,
+	//	}
+	//	if !fok {
+	//		// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+	//		fmt.Println("Chưa có giá trị value")
+	//		value = "0"
+	//		data = KpiData{
+	//			Pod:   "report_overview_latency",
+	//			Req:   "1",
+	//			Error: value,
+	//		}
+	//	}
+	//	sum = append(sum, data)
+	//} else {
+	//	// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+	//	fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+	//	value = "0"
+	//	//data := KpiData{
+	//	//	Pod:   "user_login_latency",
+	//	//	Req:   "1",
+	//	//	Error: value,
+	//	//}
+	//	//sum = append(sum, data)
+	//}
 
 	params = "?query=(sum(vtracking_api_request_latency_microseconds_sum{method=\"get_images\"})*1000)/sum(kube_pod_start_time{pod=~\"^vtracking.*\"})"
 	resp, err = http.Get(url + params)

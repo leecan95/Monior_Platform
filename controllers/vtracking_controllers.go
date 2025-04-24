@@ -278,7 +278,22 @@ func GetKpiRequestDBGetImagesController(c *gin.Context) {
 
 func GetKpiRequestDBReportController(c *gin.Context) {
 	var data config.SuccessKpi
-	data = services.PgRequestReportKpi(c)
+	//data = services.PgRequestReportKpi(c)
+	var result services.KpiData
+	result = services.GetRequestKPIReport(c)
+	req, err := strconv.ParseFloat(result.Req, 64)
+	num, err1 := strconv.ParseFloat(result.Error, 64)
+	success := req - num
+	if err != nil {
+		c.Error(err)
+	}
+	if err1 != nil {
+		c.Error(err1)
+	}
+	data = config.SuccessKpi{
+		Api:   "Report",
+		Value: (success / req) * 100,
+	}
 	c.JSON(200, data)
 }
 
@@ -320,55 +335,55 @@ func GetRxOnlyFile(c *gin.Context) {
 	c.JSON(200, data)
 }
 
-func GetDiskProController(c *gin.Context) {
-	var total, used []services.SysData
-	var mem []MemAll
-	total = services.DiskTotal(c)
-	used = services.DiskUsed(c)
-	var tnum, unum int
-	var err error
-	for _, tdata := range total {
-		for _, udata := range used {
-			if tdata.Url == udata.Url {
-				tnum, err = strconv.Atoi(tdata.Value)
-				if err != nil {
-					c.Error(err)
-				}
-				unum, err = strconv.Atoi(udata.Value)
-				if err != nil {
-					c.Error(err)
-				}
-				data := MemAll{
-					Server:    tdata.Url,
-					Total:     tdata.Value,
-					Available: strconv.Itoa(tnum - unum),
-				}
-				mem = append(mem, data)
-			}
-		}
-	}
-	c.JSON(200, mem)
-}
+//func GetDiskProController(c *gin.Context) {
+//	var total, used []services.SysData
+//	var mem []MemAll
+//	total = services.DiskTotal(c)
+//	used = services.DiskUsed(c)
+//	var tnum, unum int
+//	var err error
+//	for _, tdata := range total {
+//		for _, udata := range used {
+//			if tdata.Url == udata.Url {
+//				tnum, err = strconv.Atoi(tdata.Value)
+//				if err != nil {
+//					c.Error(err)
+//				}
+//				unum, err = strconv.Atoi(udata.Value)
+//				if err != nil {
+//					c.Error(err)
+//				}
+//				data := MemAll{
+//					Server:    tdata.Url,
+//					Total:     tdata.Value,
+//					Available: strconv.Itoa(tnum - unum),
+//				}
+//				mem = append(mem, data)
+//			}
+//		}
+//	}
+//	c.JSON(200, mem)
+//}
 
-func GetMemProController(c *gin.Context) {
-	var total, avail []services.SysData
-	var mem []MemAll
-	total = services.GetMemTotal(c)
-	avail = services.GetMemAvail(c)
-	for _, tdata := range total {
-		for _, udata := range avail {
-			if tdata.Url == udata.Url {
-				data := MemAll{
-					Server:    tdata.Url,
-					Total:     tdata.Value,
-					Available: udata.Value,
-				}
-				mem = append(mem, data)
-			}
-		}
-	}
-	c.JSON(200, mem)
-}
+//func GetMemProController(c *gin.Context) {
+//	var total, avail []services.SysData
+//	var mem []MemAll
+//	total = services.GetMemTotal(c)
+//	avail = services.GetMemAvail(c)
+//	for _, tdata := range total {
+//		for _, udata := range avail {
+//			if tdata.Url == udata.Url {
+//				data := MemAll{
+//					Server:    tdata.Url,
+//					Total:     tdata.Value,
+//					Available: udata.Value,
+//				}
+//				mem = append(mem, data)
+//			}
+//		}
+//	}
+//	c.JSON(200, mem)
+//}
 
 func GetIoProController(c *gin.Context) {
 	var iosend, ioreceive []services.SysData
