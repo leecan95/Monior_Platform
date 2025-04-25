@@ -33,7 +33,7 @@ func main() {
 	go func() {
 		for {						
 			now := time.Now()
-			next := time.Date(now.Year(), now.Month(), now.Day(), 2, 0, 0, 0, time.Local)
+			next := time.Date(now.Year(), now.Month(), now.Day(), 1, 0, 0, 0, time.Local)
 			if now.After(next) {
 				next = next.Add(24 * time.Hour)
 			}
