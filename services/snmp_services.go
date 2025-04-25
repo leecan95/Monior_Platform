@@ -78,10 +78,10 @@ func GetAllMemInfo(c *gin.Context) ([]int64, []string) {
     var svs []string
     var wg sync.WaitGroup
     var svsMutex sync.Mutex // Add mutex for thread-safe server list updates
-    results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+    results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
     semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-    for _, server := range config.Servers {
+    for _, server := range config.CMP_Servers {
         // Skip empty server addresses
         if server == "" {
             log.Printf("[WARNING] Empty server address found in config.Servers")
@@ -183,10 +183,10 @@ func GetAvailMemInfo(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		wg.Add(1)
 		semaphore <- struct{}{} // Giữ chỗ trong semaphore
 
@@ -262,10 +262,10 @@ func GetMemCacheInfo(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		wg.Add(1)
 		semaphore <- struct{}{} // Giữ chỗ trong semaphore
 
@@ -341,10 +341,10 @@ func GetMemBufferInfo(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		wg.Add(1)
 		semaphore <- struct{}{} // Giữ chỗ trong semaphore
 
@@ -420,10 +420,10 @@ func GetCpuRawUser(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		wg.Add(1)
 		semaphore <- struct{}{} // Giữ chỗ trong semaphore
 
@@ -502,7 +502,7 @@ func GetCpuRawNice(c *gin.Context) []int64 {
 	var ok bool
 	var val interface{}
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		val = GetDataSNMP(c, server, config.SsCpuRawNice)
 		if val == nil {
 			log.Printf("[ERROR] Failed to fetch SNMP from %s\n", server)
@@ -544,7 +544,7 @@ func GetCpuRawSystem(c *gin.Context) []int64 {
 	var ok bool
 	var val interface{}
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		val = GetDataSNMP(c, server, config.SsCpuRawSystem)
 		if val == nil {
 			log.Printf("[ERROR] Failed to fetch SNMP from %s\n", server)
@@ -583,10 +583,10 @@ func GetCpuRawIdle(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		wg.Add(1)
 		semaphore <- struct{}{} // Giữ chỗ trong semaphore
 
@@ -664,7 +664,7 @@ func GetCpuRawWait(c *gin.Context) []int64 {
 	var ok bool
 	var val interface{}
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		val = GetDataSNMP(c, server, config.SsCpuRawWait)
 		if val == nil {
 			log.Printf("[ERROR] Failed to fetch SNMP from %s\n", server)
@@ -703,10 +703,10 @@ func GetCpuRawKernel(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		wg.Add(1)
 		semaphore <- struct{}{} // Giữ chỗ trong semaphore
 
@@ -831,10 +831,10 @@ func GetDiskTotal(c *gin.Context) ([]int64, []string) {
     var svs []string
     var wg sync.WaitGroup
     var svsMutex sync.Mutex // Add mutex for thread-safe server list updates
-    results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+    results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
     semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-    for _, server := range config.Servers {
+    for _, server := range config.CMP_Servers {
         // Skip empty server addresses
         if server == "" {
             log.Printf("[WARNING] Empty server address found in config.Servers")
@@ -936,10 +936,10 @@ func GetDiskAvail(c *gin.Context) ([]int64, []string) {
     var svs []string
     var wg sync.WaitGroup
     var svsMutex sync.Mutex // Add mutex for thread-safe server list updates
-    results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+    results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
     semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-    for _, server := range config.Servers {
+    for _, server := range config.CMP_Servers {
         // Skip empty server addresses
         if server == "" {
             log.Printf("[WARNING] Empty server address found in config.Servers")
@@ -1041,10 +1041,10 @@ func GetIoReceiveData(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		wg.Add(1)
 		semaphore <- struct{}{} // Giữ chỗ trong semaphore
 
@@ -1120,10 +1120,10 @@ func GetIoSentData(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		wg.Add(1)
 		semaphore <- struct{}{} // Giữ chỗ trong semaphore
 
@@ -1199,7 +1199,7 @@ func GetMemSwapTotal(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
 	for _, server := range config.Servers {
@@ -1278,7 +1278,7 @@ func GetMemSwapAvail(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
 	for _, server := range config.Servers {
@@ -1357,10 +1357,10 @@ func GetCpuPercentUser(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		wg.Add(1)
 		semaphore <- struct{}{} // Giữ chỗ trong semaphore
 
@@ -1436,10 +1436,10 @@ func GetCpuPercentSystem(c *gin.Context) ([]int64, []string) {
 	var sum []int64
 	var svs []string
 	var wg sync.WaitGroup
-	results := make(chan int64, len(config.Servers))    // Channel để thu thập kết quả
+	results := make(chan int64, len(config.CMP_Servers))    // Channel để thu thập kết quả
 	semaphore := make(chan struct{}, maxConcurrentSNMP) // Giới hạn 20 request SNMP chạy đồng thời
 
-	for _, server := range config.Servers {
+	for _, server := range config.CMP_Servers {
 		wg.Add(1)
 		semaphore <- struct{}{} // Giữ chỗ trong semaphore
 
