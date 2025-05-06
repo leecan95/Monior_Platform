@@ -11,7 +11,7 @@ const Server175 = "10.207.189.175"
 const Server176 = "10.207.189.176"
 const Server177 = "10.207.189.177"
 const Server178 = "10.207.189.178"
-const CMP_num = 50
+const CMP_num = 12
 
 var CMP_Servers = [CMP_num]string{
 	Server168,

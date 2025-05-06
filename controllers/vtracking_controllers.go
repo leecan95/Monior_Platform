@@ -31,6 +31,85 @@ func GetOrganizationsTPSController(c *gin.Context) {
 	}
 }
 
+func GetTelCoApiTPSController(c *gin.Context) {
+	values := services.GetTelcoApiTPS(c)
+	if values != "" {
+		reponse := Response{
+			Value: values,
+		}
+		c.JSON(200, reponse)
+	}
+}
+
+func GetVtPricingTPSController(c *gin.Context) {
+	values := services.GetVtPricingTPS(c)
+	if values != "" {
+		reponse := Response{
+			Value: values,
+		}
+		c.JSON(200, reponse)
+	}
+}
+
+func GetMiniOvtTPSController(c *gin.Context) {
+	values := services.GetMiniOvtTPS(c)
+	if values != "" {
+		reponse := Response{
+			Value: values,
+		}
+		c.JSON(200, reponse)
+	}
+}
+
+func GetTelcoJobTPSController(c *gin.Context) {
+	values := services.GetTelcoJobTPS(c)
+	if values != "" {
+		reponse := Response{
+			Value: values,
+		}
+		c.JSON(200, reponse)
+	}
+}
+
+func GetTotalTPSController(c *gin.Context) {
+	values := make([]interface{}, 0, 5)
+	users := services.GetUsersTPS(c)
+	values = append(values, map[string]interface{}{
+		"api":   "Users",
+		"value": users,
+	})
+	
+	telcoapi := services.GetTelcoApiTPS(c)
+	values = append(values, map[string]interface{}{
+		"api":   "TelcoApi",
+		"value": telcoapi,
+	})
+	
+	vtpricing := services.GetVtPricingTPS(c)
+	values = append(values, map[string]interface{}{
+		"api":   "VtPricing",
+		"value": vtpricing,
+	})
+	
+	miniovt := services.GetMiniOvtTPS(c)
+	values = append(values, map[string]interface{}{
+		"api":   "MiniOvt",
+		"value": miniovt,
+	})
+	
+	telcojob := services.GetTelcoJobTPS(c)
+	values = append(values, map[string]interface{}{
+		"api":   "TelcoJob",
+		"value": telcojob,
+	})
+
+	// Always return the values since we're appending data regardless
+	reponse := Response{
+		Value: values,
+	}
+	c.JSON(200, reponse)
+}
+
 func GetAdapterTPSController(c *gin.Context) {
 	values := services.GetAdapterTPS(c)
 	if values != "" {
@@ -166,6 +245,32 @@ func GetKpiVtrackController(c *gin.Context) {
 	c.JSON(200, reponse)
 
 }
+
+func GetKpiCmpController(c *gin.Context) {
+	var data []services.KpiData
+	var reponse []KpiVtrack
+	data = services.GetKpiCmp(c)
+
+	for _, result := range data {
+		req, err := strconv.ParseFloat(result.Req, 64)
+		num, err1 := strconv.ParseFloat(result.Error, 64)
+		if err != nil {
+			c.Error(err)
+		}
+		if err1 != nil {
+			c.Error(err1)
+		}
+		cal := KpiVtrack{
+			Pod:  result.Pod,
+			Rate: (100 - (num/req)*100),
+		}
+		reponse = append(reponse, cal)
+	}
+
+	c.JSON(200, reponse)
+
+}
+
 
 func GetKpiLatencyVtrackController(c *gin.Context) {
 	var data []services.KpiData

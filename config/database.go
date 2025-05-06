@@ -13,7 +13,7 @@ const (
 	EnvDBSSLKey      = "VT_USERS_DB_SSL_KEY"
 	EnvDBSSLRootCert = "VT_USERS_DB_SSL_ROOT_CERT"
 	DefDBHost        = "10.207.189.122"
-	DefDBPort        = "5000"
+	DefDBPort        = "5002"
 	DefDBUser        = "postgres"
 	DefDBPass        = "newpassword"
 	DefDB            = "monitor"

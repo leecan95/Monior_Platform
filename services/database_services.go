@@ -387,6 +387,23 @@ func PgLatencyKpi(c *gin.Context) []config.LatencyKpi {
 	return reponse
 }
 
+func PgCMPLatencyKpi(c *gin.Context) []config.LatencyKpi {
+	var data config.LatencyKpi
+	var reponse []config.LatencyKpi
+
+	data, _ = model.GetListDataPackageLatency(c)	
+	reponse = append(reponse, data)
+	data, _ = model.GetlistSubscribeLatency(c)
+	reponse = append(reponse, data)
+	data, _ = model.GetlistBalanceInfoLatency(c)
+	reponse = append(reponse, data)
+	data, _ = model.GetktmiLatency(c)
+	reponse = append(reponse, data)
+	data, _ = model.GetisdnvalidateLatency(c)
+	reponse = append(reponse, data)	
+	return reponse
+}
+
 func PgLatencyTotalKpi(c *gin.Context) config.LatencyKpi {
 	var data config.LatencyKpi
 	data, _ = model.GetOverallLatency(c)

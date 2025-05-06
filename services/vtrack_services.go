@@ -15,7 +15,172 @@ import (
 func GetUsersTPS(c *gin.Context) interface{} {
 	var response map[string]interface{}
 	url := config.PrometheusUrl
-	params := "?query=sum(irate(users_api_request_count[30s]))"
+	params := "?query=sum(irate(users_api_request_count[1m]))"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	fmt.Printf("User reponse : %s", body)
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	result := response["data"].(map[string]interface{})["result"].([]interface{})
+	if result == nil {
+		log.Printf("Wrong data for get number")
+		c.Error(err)
+	}
+	value := result[0].(map[string]interface{})["value"].([]interface{})
+	number := value[1].(string)
+	return number
+}
+
+func GetTelcoApiTPS(c *gin.Context) interface{} {
+	var response map[string]interface{}
+	url := config.PrometheusUrl
+	params := "?query=sum(irate(telcoapi_api_request_count[1m]))"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	fmt.Printf("User reponse : %s", body)
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	result := response["data"].(map[string]interface{})["result"].([]interface{})
+	if result == nil {
+		log.Printf("Wrong data for get number")
+		c.Error(err)
+	}
+	value := result[0].(map[string]interface{})["value"].([]interface{})
+	number := value[1].(string)
+	return number
+}
+
+// func GetTelcoApiTPS(c *gin.Context) interface{} {
+// 	var response map[string]interface{}
+// 	url := config.PrometheusUrl
+// 	params := "?query=sum(irate(telcoapi_api_request_count[1m]))"
+// 	resp, err := http.Get(url + params)
+// 	if err != nil {
+// 		log.Printf("error in services %s", err)
+// 		c.Error(err)
+// 	}
+// 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+// 	body, err := ioutil.ReadAll(resp.Body)
+// 	if err != nil {
+// 		log.Printf("error reading response body: %s", err)
+// 		c.Error(err)
+// 	}
+// 	fmt.Printf("User reponse : %s", body)
+
+// 	err = json.Unmarshal(body, &response)
+// 	if err != nil {
+// 		log.Printf("error unmarshaling JSON: %s", err)
+// 		c.Error(err)
+// 	}
+// 	result := response["data"].(map[string]interface{})["result"].([]interface{})
+// 	if result == nil {
+// 		log.Printf("Wrong data for get number")
+// 		c.Error(err)
+// 	}
+// 	value := result[0].(map[string]interface{})["value"].([]interface{})
+// 	number := value[1].(string)
+// 	return number
+// }
+
+func GetVtPricingTPS(c *gin.Context) interface{} {
+	var response map[string]interface{}
+	url := config.PrometheusUrl
+	params := "?query=sum(irate(vtPricing_api_request_count[1m]))"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	fmt.Printf("User reponse : %s", body)
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	result := response["data"].(map[string]interface{})["result"].([]interface{})
+	if result == nil {
+		log.Printf("Wrong data for get number")
+		c.Error(err)
+	}
+	value := result[0].(map[string]interface{})["value"].([]interface{})
+	number := value[1].(string)
+	return number
+}
+
+func GetMiniOvtTPS(c *gin.Context) interface{} {
+	var response map[string]interface{}
+	url := config.PrometheusUrl
+	params := "?query=sum(irate(miniovt_api_request_count[1m]))"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	fmt.Printf("User reponse : %s", body)
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	result := response["data"].(map[string]interface{})["result"].([]interface{})
+	if result == nil {
+		log.Printf("Wrong data for get number")
+		c.Error(err)
+	}
+	value := result[0].(map[string]interface{})["value"].([]interface{})
+	number := value[1].(string)
+	return number
+}
+
+func GetTelcoJobTPS(c *gin.Context) interface{} {
+	var response map[string]interface{}
+	url := config.PrometheusUrl
+	params := "?query=sum(irate(telcojob_api_request_count[1m]))"
 	resp, err := http.Get(url + params)
 	if err != nil {
 		log.Printf("error in services %s", err)
@@ -1870,6 +2035,431 @@ func GetKpiVtrack(c *gin.Context) []KpiData {
 	//	//}
 	//	//sum = append(sum, data)
 	//}
+	return sum
+
+}
+
+func GetKpiCmp(c *gin.Context) []KpiData {
+	fmt.Println("check Get Kpi API")
+	var response PodReponse
+	var sum []KpiData
+	var value, evalue string
+	var ok, eok bool
+	url := config.PrometheusUrl
+	params := "?query=sum(users_api_request_error_count)"
+	resp, err := http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		evalue, eok = response.Data.Result[0].Value[1].(string)
+		if !eok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			evalue = "0"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		eok = false
+		evalue = "0"
+	}
+
+	params = "?query=sum(users_api_request_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		value, ok = response.Data.Result[0].Value[1].(string)
+		if !ok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			value = "1"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		value = "1"
+	}
+	if ok && eok {
+		fmt.Println("giá trị value " + value + " " + evalue)
+		data := KpiData{
+			Pod:   "user_services",
+			Req:   value,
+			Error: evalue,
+		}
+		sum = append(sum, data)
+	}
+	if !ok || !eok {
+		fmt.Println("khong co gia tri evalue ")
+		data := KpiData{
+			Pod:   "user_services",
+			Req:   "1",
+			Error: "0",
+		}
+		sum = append(sum, data)
+	}
+
+	params = "?query=sum(miniovt_api_request_error_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		evalue, eok = response.Data.Result[0].Value[1].(string)
+		if !eok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			evalue = "0"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		eok = false
+		evalue = "0"
+	}
+
+	params = "?query=sum(miniovt_api_request_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		value, ok = response.Data.Result[0].Value[1].(string)
+		if !ok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			value = "1"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		value = "1"
+	}
+	if ok && eok {
+		fmt.Println("giá trị value " + value + " " + evalue)
+		data := KpiData{
+			Pod:   "miniovt_services",
+			Req:   value,
+			Error: evalue,
+		}
+		sum = append(sum, data)
+	}
+	if !ok || !eok {
+		fmt.Println("khong co gia tri evalue ")
+		data := KpiData{
+			Pod:   "miniovt_services",
+			Req:   "1",
+			Error: "0",
+		}
+		sum = append(sum, data)
+	}
+	params = "?query=sum(telcoapi_api_request_error_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		evalue, eok = response.Data.Result[0].Value[1].(string)
+		if !eok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			evalue = "0"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		eok = false
+		evalue = "0"
+	}
+
+	params = "?query=sum(telcoapi_api_request_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		value, ok = response.Data.Result[0].Value[1].(string)
+		if !ok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			value = "1"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		value = "1"
+	}
+	if ok && eok {
+		fmt.Println("giá trị value " + value + " " + evalue)
+		data := KpiData{
+			Pod:   "telcoapi_services",
+			Req:   value,
+			Error: evalue,
+		}
+		sum = append(sum, data)
+	}
+	if !ok || !eok {
+		fmt.Println("khong co gia tri evalue ")
+		data := KpiData{
+			Pod:   "telcoapi_services",
+			Req:   "1",
+			Error: "0",
+		}
+		sum = append(sum, data)
+	}
+
+	params = "?query=sum(telcojob_api_request_error_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		evalue, eok = response.Data.Result[0].Value[1].(string)
+		if !eok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			evalue = "0"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		evalue = "0"
+	}
+	params = "?query=sum(telcojob_api_request_count)"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		value, ok = response.Data.Result[0].Value[1].(string)
+		if !ok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			value = "0"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		value = "0"
+	}
+	if ok && eok {
+		data := KpiData{
+			Pod:   "telcojob_services",
+			Req:   value,
+			Error: evalue,
+		}
+		sum = append(sum, data)
+	}
+	if !ok || !eok {
+		fmt.Println("khong co gia tri evalue ")
+		data := KpiData{
+			Pod:   "telcojob_services",
+			Req:   "1",
+			Error: "0",
+		}
+		sum = append(sum, data)
+	}
+	params = "?query=sum(vtPricing_api_request_error_count{})"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 10")
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 11")
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 12")
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		evalue, eok = response.Data.Result[0].Value[1].(string)
+		if !eok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			evalue = "0"
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		evalue = "0"
+		eok = false
+	}
+	fmt.Println("check 13")
+	params = "?query=sum(vtPricing_api_request_count{})"
+	resp, err = http.Get(url + params)
+	if err != nil {
+		log.Printf("error in services %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 14")
+	body, err = ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("error reading response body: %s", err)
+		c.Error(err)
+	}
+	fmt.Println("check 15")
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		log.Printf("error unmarshaling JSON: %s", err)
+		c.Error(err)
+	}
+	if len(response.Data.Result) > 0 && len(response.Data.Result[0].Value) > 1 {
+		// Kiểm tra xem mảng Value trả về có ít nhất 2 phần tử hay không
+		value, ok = response.Data.Result[0].Value[1].(string)
+		if !ok {
+			// Giá trị không tồn tại hoặc không thể chuyển đổi thành kiểu string
+			fmt.Println("Chưa có giá trị value")
+			value = "1"
+			ok = false
+		}
+	} else {
+		// Không có giá trị nào trong mảng Value hoặc không đủ phần tử để truy cập
+		fmt.Println("Không có giá trị trong mảng Value hoặc không đủ phần tử")
+		value = "1"
+	}
+	if ok && eok {
+		fmt.Println("giá trị value " + value + " " + evalue)
+		data := KpiData{
+			Pod:   "vtPricing_services",
+			Req:   value,
+			Error: evalue,
+		}
+		sum = append(sum, data)
+	}
+	if !ok || !eok {
+		fmt.Println("khong co gia tri value ")
+		data := KpiData{
+			Pod:   "vtPricing_services",
+			Req:   "1",
+			Error: "0",
+		}
+		sum = append(sum, data)
+	}
+
 	return sum
 
 }
