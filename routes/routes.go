@@ -84,6 +84,10 @@ func SetupRouter() *gin.Engine {
 	route.GET("ems/mqtt/client/connect", controllers.GetMqttClientController)
 	route.GET("ems/mqtt/message/receive", controllers.GetRateMqttMessageController)
 	route.GET("ems/prometheus", middlewares.ValidateQueryMiddleware, controllers.GetPrometheusController)
+	route.GET("ems/transactions/kpi", middlewares.ValidateTransactionQueryMiddleware, controllers.GetTransactionsController)
+	route.GET("ems/kpi/latency/percentile",controllers.GetLatencyPercentileByURLController,)
+	route.POST("/ems/kpi/logs", controllers.CollectApiLogController)
+
 
 	// Endpoint to get metrics
 	// Middleware để ghi log vào metric

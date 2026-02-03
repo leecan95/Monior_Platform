@@ -5,6 +5,7 @@ import (
 	"Monitor_Platform/model"
 	"crypto/tls"
 	"fmt"
+	"math"
 	"net/smtp"
 	"strconv"
 	"strings"
@@ -94,7 +95,7 @@ func ContentEmail() config.Mail {
 	subject := fmt.Sprintf("[Mail tự động]Báo cáo VTRACKING - Ngày %s", formattedDate)
 	// Lấy kết quả
 	//Giá trị Latency thực tế
-	tracking, _ := model.GetTrackingLatencyOneDay()
+	//tracking, _ := model.GetTrackingLatencyOneDay()
 	image, _ := model.GetImageLatencyOneDay()
 	login, _ := model.GetLoginLatencyOneDay()
 	dashboard, _ := model.GetDashboardLatencyOneDay()
@@ -102,31 +103,38 @@ func ContentEmail() config.Mail {
 
 	// Lấy dữ liệu license
 	licenseExpired, _ := model.GetLicenseExpiredTodayTotal()
+	licenseExpiredMonth, _ := model.GetLicenseExpiredThisMonthTotal()
+	licenseExpiredYear, _ := model.GetLicenseExpiredThisYearTotal()
 	licenseNew, _ := model.GetLicenseNewTodayTotal()
 	licenseNewMonth, _ := model.GetLicenseNewThisMonthTotal()
 	licenseNewTotal, _ := model.GetLicenseNewTotal()
 	licenseValid, _ := model.GetLicenseValidThisMonthTotal()
+	licenseReNewToday, _ := model.GetLicenseReNewToday()
+	licenseReNewThisMonth, _ := model.GetLicenseReNewThisMonth()
 
 	// Ngưỡng đánh giá >=95%
 	threshold := 95.0
 	// Danh sách các thông số
-	kpis := []config.LatencyKpi{tracking, image, login, dashboard, total}
+	//kpis := []config.LatencyKpi{tracking, image, login, dashboard, total}
+	kpis := []config.LatencyKpi{image, login, dashboard, total}
 
 	// Tạo bảng HTML động cho Latency
 	rows := ""
 	for _, kpi := range kpis {
 		percert := parseFloat(kpi.Count) / parseFloat(kpi.Total) * 100
+		pFloat := parseFloat(kpi.Percentile)
+		p := int64(math.Round(pFloat))
 		evaluation := GetEvaluation(percert, threshold)
 		rows += fmt.Sprintf(`
 			<tr>
 				<td>%s</td>
 				<td>%s</td>
 				<td>%s</td>
-				<td>%s</td>
+				<td>%d ms</td>
 				<td>%.2f%%</td>
 				<td>&gt;=%.2f%%</td>
 				<td>%s</td>
-			</tr>`, kpi.Api, kpi.Total, kpi.Count, kpi.Percentile, percert, threshold, evaluation)
+			</tr>`, kpi.Api, kpi.Total, kpi.Count, p, percert, threshold, evaluation)
 	}
 
 	// Tạo bảng HTML động cho License
@@ -135,6 +143,14 @@ func ContentEmail() config.Mail {
 			<td>Số thuê bao hết hạn trong ngày</td>
 			<td>%.0f</td>
 		</tr>
+		<tr>
+			<td>Số thuê bao hết hạn trong tháng</td>
+			<td>%.0f</td>
+		</tr>
+		<tr>
+			<td>Số thuê bao hết hạn trong năm</td>
+			<td>%.0f</td>
+		</tr>				
 		<tr>
 			<td>Số thuê bao đăng ký mới trong ngày</td>
 			<td>%.0f</td>
@@ -148,13 +164,26 @@ func ContentEmail() config.Mail {
 			<td>%.0f</td>
 		</tr>
 		<tr>
-			<td>Số thuê bao còn hạn trong tháng</td>
+			<td>Số thuê bao gia hạn trong ngày</td>
 			<td>%.0f</td>
-		</tr>`,
+		</tr>
+		<tr>
+			<td>Số thuê bao gia hạn trong tháng</td>
+			<td>%.0f</td>
+		</tr>
+		<tr>
+			<td>Tổng số thuê bao còn hạn</td>
+			<td>%.0f</td>
+		</tr>
+		`,
 		licenseExpired.Value,
+		licenseExpiredMonth.Value,
+		licenseExpiredYear.Value,
 		licenseNew.Value,
 		licenseNewMonth.Value,
 		licenseNewTotal.Value,
+		licenseReNewToday.Value,
+		licenseReNewThisMonth.Value,
 		licenseValid.Value,
 	)
 
@@ -284,9 +313,14 @@ func GetEvaluation(value float64, threshold float64) string {
 	return "<span style='color: red; font-weight: bold;'>Không đạt</span>"
 }
 func parseFloat(value string) float64 {
+	// Xử lý trường hợp giá trị rỗng hoặc NULL
+	if value == "" || value == "0" {
+		return 0.0
+	}
+
 	result, err := strconv.ParseFloat(value, 64)
 	if err != nil {
-		fmt.Println("❌ Lỗi chuyển đổi:", value)
+		fmt.Printf("❌ Lỗi chuyển đổi giá trị '%s': %v\n", value, err)
 		return 0.0
 	}
 	return result

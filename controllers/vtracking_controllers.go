@@ -9,7 +9,34 @@ import (
 	"strconv"
 	"strings"
 )
+ //NEW
+ 
+type ApiLogRequest struct {
+	Url        string `json:"url" binding:"required"`
+	StatusCode int    `json:"status_code" binding:"required"`
+	Latency    int64  `json:"latency" binding:"required"`
+	Timestamp  int64  `json:"timestamp"`
+}
 
+func CollectApiLogController(c *gin.Context) {
+	var req ApiLogRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	logItem := model.ApiLog{
+		Url:        req.Url,
+		StatusCode: req.StatusCode,
+		Latency:    req.Latency,
+		Timestamp:  time.UnixMilli(req.Timestamp),
+	}
+
+	services.EnqueueApiLog(logItem)
+
+	c.JSON(200, gin.H{"message": "accepted"})
+}
+// NEWWWW
 func GetUsersTPSController(c *gin.Context) {
 	values := services.GetUsersTPS(c)
 
@@ -275,6 +302,70 @@ func GetKpiRequestDBGetImagesController(c *gin.Context) {
 	data = services.PgRequestGetImageKpi(c)
 	c.JSON(200, data)
 }
+func ResolveActionURL(action string) (string, bool) {
+	url, ok := config.ActionURLMap[action]
+	return url, ok
+}
+func GetTransactionsController(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	action := c.Query("action")
+
+	var url string
+	if action != "" {
+		u, ok := ResolveActionURL(action)
+		if !ok {
+			c.JSON(400, gin.H{"error": "invalid action"})
+			return
+		}
+		url = u
+	}
+
+	data, err := services.GetTransactions(
+		c,
+		url,
+		offset,
+		limit,
+	)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, data)
+}
+
+func GetLatencyPercentileByURLController(c *gin.Context) {
+	action := c.Query("action")
+	var url string
+	if action != "" {
+		u, ok := ResolveActionURL(action)
+		if !ok {
+			c.JSON(400, gin.H{"error": "invalid action"})
+			return
+		}
+		url = u
+	}
+
+	if url == "" {
+		c.JSON(400, gin.H{
+			"error": "url query parameter is required",
+		})
+		return
+	}
+
+	result, err := services.GetLatencyPercentileByURLService(c, url)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(200, result)
+}
+
+
 
 func GetKpiRequestDBReportController(c *gin.Context) {
 	var data config.SuccessKpi

@@ -19,6 +19,14 @@ import (
 	_ "github.com/lib/pq"
 )
 
+// Helper function để xử lý giá trị NULL từ database
+func getStringValue(nullStr sql.NullString) string {
+	if nullStr.Valid {
+		return nullStr.String
+	}
+	return "0" // Trả về giá trị mặc định khi NULL
+}
+
 var Schema = `
 CREATE TABLE person (
     first_name text,
@@ -77,6 +85,13 @@ type Place struct {
 	Country string
 	City    sql.NullString
 	TelCode int
+}
+
+type ApiLog struct {
+	Url        string
+	StatusCode int
+	Latency    int64
+	Timestamp  time.Time
 }
 
 func LoadDBConfig() config.DBConfig {
@@ -157,6 +172,16 @@ func ConnectDevicesDB(cfg config.DBConfig) (*PostgreDb, error) {
 	return &PostgreDb{db}, nil
 }
 
+func ConnectAttributesDB(cfg config.DBConfig) (*PostgreDb, error) {
+	url := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", cfg.Host, cfg.Port, cfg.User, "attributes", cfg.Pass, cfg.SSLMode, cfg.SSLCert, cfg.SSLKey, cfg.SSLRootcert)
+
+	db, err := sql.Open("postgres", url)
+	if err != nil {
+		return nil, err
+	}
+	return &PostgreDb{db}, nil
+}
+
 func ConnectPoolDB(cfg config.DBConfig) (*PostgreDB, error) {
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s pool_max_conns=10", cfg.Host, cfg.Port, cfg.User, cfg.Pass, cfg.Name)
 	poolConfig, err := pgxpool.ParseConfig(connStr)
@@ -222,22 +247,22 @@ func (c *PostgreDb) QueryLatency() (config.LatencyKpi, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var count string
-		var latency string
-		var total string
-		var result string
+		var count sql.NullString
+		var latency sql.NullString
+		var total sql.NullString
+		var result sql.NullString
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
 			Api:        "Total",
-			Total:      total,
-			Count:      count,
-			Percentile: latency,
-			Result:     result,
+			Total:      getStringValue(total),
+			Count:      getStringValue(count),
+			Percentile: getStringValue(latency),
+			Result:     getStringValue(result),
 		}
-		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 	}
 	return data, nil
 }
@@ -248,15 +273,15 @@ func (p *PostgreDB) QueryLatencyPool() (config.LatencyKpi, error) {
 		return data, err
 	}
 	defer conn.Release()
-	var count string
-	var latency string
-	var total string
-	var result string
+	var count sql.NullString
+	var latency sql.NullString
+	var total sql.NullString
+	var result sql.NullString
 	err = conn.QueryRow(context.Background(), `WITH Percentile AS (
 SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95
     FROM transactions
 )
-SELECT 
+SELECT
     (SELECT COUNT(*) FROM transactions WHERE latency < 5000) AS count_latency_below_5,
     (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,
     (SELECT COUNT(*) FROM transactions) AS total_records,
@@ -270,12 +295,12 @@ FROM Percentile`).Scan(&count, &latency, &total, &result)
 	}
 	data = config.LatencyKpi{
 		Api:        "Total",
-		Total:      total,
-		Count:      count,
-		Percentile: latency,
-		Result:     result,
+		Total:      getStringValue(total),
+		Count:      getStringValue(count),
+		Percentile: getStringValue(latency),
+		Result:     getStringValue(result),
 	}
-	fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+	fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 
 	return data, nil
 }
@@ -309,6 +334,148 @@ func GetOverallLatencyPool(c *gin.Context) (config.LatencyKpi, error) {
 	return data, nil
 }
 
+// Get transactions data
+
+
+func (c *PostgreDb) QueryTransactions(url string, offset, limit int) ([]config.TransactionQuery, error) {
+	var (
+		rows *sql.Rows
+		err  error
+	)
+
+	if url != "" {
+		rows, err = c.db.Query(`
+			SELECT
+				method,
+				url,
+				status_code,
+				response_body,
+				service_name,
+				latency,
+				ts,
+				user_id,
+				project_id
+			FROM transactions
+			WHERE url LIKE $1
+			ORDER BY ts DESC
+			LIMIT $2 OFFSET $3
+		`, "%"+url+"%", limit, offset)
+	} else {
+		rows, err = c.db.Query(`
+			SELECT
+				method,
+				url,
+				status_code,
+				response_body,
+				service_name,
+				latency,
+				ts,
+				user_id,
+				project_id
+			FROM transactions
+			ORDER BY ts DESC
+			LIMIT $1 OFFSET $2
+		`, limit, offset)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	results := make([]config.TransactionQuery, 0, limit)
+
+	for rows.Next() {
+		var tx config.TransactionQuery
+		if err := rows.Scan(
+			&tx.Method,
+			&tx.URL,
+			&tx.StatusCode,
+			&tx.ResponseBody,
+			&tx.ServiceName,
+			&tx.Latency,
+			&tx.TS,
+			&tx.UserID,
+			&tx.ProjectID,
+		); err != nil {
+			fmt.Println("Error scanning row", err)
+			return nil, err
+		}
+		results = append(results, tx)
+		fmt.Printf("url : %s, response_body: %s, latency: %d, status_code: %d\n", tx.URL, tx.ResponseBody, tx.Latency, tx.StatusCode)
+	}
+
+	if err := rows.Err(); err != nil {
+		fmt.Println("Error iterating rows", err)
+		return nil, err
+	}
+
+	return results, nil
+}
+
+
+func GetTransactions(c *gin.Context, url string, offset int, limit int) ([]config.TransactionQuery, error) {
+	var cfg config.DBConfig
+	var data []config.TransactionQuery
+	cfg = LoadDBConfig()
+	db2, _ := ConnectTransDB(cfg)
+	data, _ = db2.QueryTransactions(url, offset, limit)
+	return data, nil
+}
+
+func (c *PostgreDb) QueryLatencyPercentileByURL(
+	url string,
+) (config.LatencyPercentileResult, error) {
+
+	var result config.LatencyPercentileResult
+
+	query := `
+	WITH Percentile AS (
+		SELECT 
+			PERCENTILE_CONT(0.95) 
+			WITHIN GROUP (ORDER BY latency) AS percentile_95
+		FROM transactions
+		WHERE url LIKE $1
+		  AND ts >= EXTRACT(EPOCH FROM CURRENT_DATE) * 1000000
+		  AND ts < EXTRACT(EPOCH FROM (CURRENT_DATE + INTERVAL '1 day')) * 1000000
+	),
+	Stats AS (
+		SELECT
+			COUNT(*) AS total_records,
+			COUNT(*) FILTER (WHERE latency < 5000) AS count_latency_below_5
+		FROM transactions
+		WHERE url LIKE $1
+		  AND ts >= EXTRACT(EPOCH FROM CURRENT_DATE) * 1000000
+		  AND ts < EXTRACT(EPOCH FROM (CURRENT_DATE + INTERVAL '1 day')) * 1000000
+	)
+	SELECT
+		s.count_latency_below_5,
+		p.percentile_95,
+		s.total_records,
+		CASE
+			WHEN s.count_latency_below_5 > (0.95 * s.total_records) 
+			THEN 'Yes'
+			ELSE 'No'
+		END AS exceeds_95_percent
+	FROM Stats s, Percentile p
+	`
+
+	row := c.db.QueryRow(query, "%"+url+"%")
+
+	err := row.Scan(
+		&result.CountBelow5,
+		&result.Percentile95,
+		&result.TotalRecords,
+		&result.Exceeds95Pct,
+	)
+	if err != nil {
+		return result, err
+	}
+
+	return result, nil
+}
+
+
 func (c *PostgreDb) QueryLoginLatency() (config.LatencyKpi, error) {
 	fmt.Print("query data")
 	var data config.LatencyKpi
@@ -320,22 +487,22 @@ func (c *PostgreDb) QueryLoginLatency() (config.LatencyKpi, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var count string
-		var latency string
-		var total string
-		var result string
+		var count sql.NullString
+		var latency sql.NullString
+		var total sql.NullString
+		var result sql.NullString
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
 			Api:        "Login",
-			Total:      total,
-			Count:      count,
-			Percentile: latency,
-			Result:     result,
+			Total:      getStringValue(total),
+			Count:      getStringValue(count),
+			Percentile: getStringValue(latency),
+			Result:     getStringValue(result),
 		}
-		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 	}
 	return data, nil
 }
@@ -369,22 +536,22 @@ func (c *PostgreDb) QueryReportLatency() (config.LatencyKpi, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var count string
-		var latency string
-		var total string
-		var result string
+		var count sql.NullString
+		var latency sql.NullString
+		var total sql.NullString
+		var result sql.NullString
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
 			Api:        "Report",
-			Total:      total,
-			Count:      count,
-			Percentile: latency,
-			Result:     result,
+			Total:      getStringValue(total),
+			Count:      getStringValue(count),
+			Percentile: getStringValue(latency),
+			Result:     getStringValue(result),
 		}
-		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 	}
 	return data, nil
 }
@@ -418,22 +585,22 @@ func (c *PostgreDb) QueryGetimageLatency() (config.LatencyKpi, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var count string
-		var latency string
-		var total string
-		var result string
+		var count sql.NullString
+		var latency sql.NullString
+		var total sql.NullString
+		var result sql.NullString
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
 			Api:        "Get_images",
-			Total:      total,
-			Count:      count,
-			Percentile: latency,
-			Result:     result,
+			Total:      getStringValue(total),
+			Count:      getStringValue(count),
+			Percentile: getStringValue(latency),
+			Result:     getStringValue(result),
 		}
-		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 	}
 	return data, nil
 }
@@ -467,22 +634,22 @@ func (c *PostgreDb) QueryTrackingLatency() (config.LatencyKpi, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var count string
-		var latency string
-		var total string
-		var result string
+		var count sql.NullString
+		var latency sql.NullString
+		var total sql.NullString
+		var result sql.NullString
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
 			Api:        "Tracking",
-			Total:      total,
-			Count:      count,
-			Percentile: latency,
-			Result:     result,
+			Total:      getStringValue(total),
+			Count:      getStringValue(count),
+			Percentile: getStringValue(latency),
+			Result:     getStringValue(result),
 		}
-		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 	}
 	return data, nil
 }
@@ -508,22 +675,22 @@ func (c *PostgreDb) QueryTrackingLatencyOneDay() (config.LatencyKpi, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var count string
-		var latency string
-		var total string
-		var result string
+		var count sql.NullString
+		var latency sql.NullString
+		var total sql.NullString
+		var result sql.NullString
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
 			Api:        "Lấy dữ liệu hành trình",
-			Total:      total,
-			Count:      count,
-			Percentile: latency,
-			Result:     result,
+			Total:      getStringValue(total),
+			Count:      getStringValue(count),
+			Percentile: getStringValue(latency),
+			Result:     getStringValue(result),
 		}
-		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 	}
 	return data, nil
 }
@@ -548,22 +715,22 @@ func (c *PostgreDb) QueryLoginLatencyOneDay() (config.LatencyKpi, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var count string
-		var latency string
-		var total string
-		var result string
+		var count sql.NullString
+		var latency sql.NullString
+		var total sql.NullString
+		var result sql.NullString
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
 			Api:        "Đăng nhập hệ thống",
-			Total:      total,
-			Count:      count,
-			Percentile: latency,
-			Result:     result,
+			Total:      getStringValue(total),
+			Count:      getStringValue(count),
+			Percentile: getStringValue(latency),
+			Result:     getStringValue(result),
 		}
-		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 	}
 	return data, nil
 }
@@ -588,22 +755,22 @@ func (c *PostgreDb) QueryImageLatencyOneDay() (config.LatencyKpi, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var count string
-		var latency string
-		var total string
-		var result string
+		var count sql.NullString
+		var latency sql.NullString
+		var total sql.NullString
+		var result sql.NullString
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
 			Api:        "Lấy dữ liệu hình ảnh",
-			Total:      total,
-			Count:      count,
-			Percentile: latency,
-			Result:     result,
+			Total:      getStringValue(total),
+			Count:      getStringValue(count),
+			Percentile: getStringValue(latency),
+			Result:     getStringValue(result),
 		}
-		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 	}
 	return data, nil
 }
@@ -628,22 +795,22 @@ func (c *PostgreDb) QueryDashboardLatencyOneDay() (config.LatencyKpi, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var count string
-		var latency string
-		var total string
-		var result string
+		var count sql.NullString
+		var latency sql.NullString
+		var total sql.NullString
+		var result sql.NullString
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
 			Api:        "Tải bảng ứng dụng",
-			Total:      total,
-			Count:      count,
-			Percentile: latency,
-			Result:     result,
+			Total:      getStringValue(total),
+			Count:      getStringValue(count),
+			Percentile: getStringValue(latency),
+			Result:     getStringValue(result),
 		}
-		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 	}
 	return data, nil
 }
@@ -668,22 +835,22 @@ func (c *PostgreDb) QueryTotalLatencyOneDay() (config.LatencyKpi, error) {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var count string
-		var latency string
-		var total string
-		var result string
+		var count sql.NullString
+		var latency sql.NullString
+		var total sql.NullString
+		var result sql.NullString
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
 			Api:        "Tổng quát",
-			Total:      total,
-			Count:      count,
-			Percentile: latency,
-			Result:     result,
+			Total:      getStringValue(total),
+			Count:      getStringValue(count),
+			Percentile: getStringValue(latency),
+			Result:     getStringValue(result),
 		}
-		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", count, latency, total, result)
+		fmt.Printf("count : %s, latency: %s, total: %s, result: %s\n", data.Count, data.Percentile, data.Total, data.Result)
 	}
 	return data, nil
 }
@@ -1127,6 +1294,70 @@ func GetLicenseExpiredTodayTotal() (config.DataLicense, error) {
 	data, _ = db2.QueryLicenseExpiredTodayCount()
 	return data, nil
 }
+
+func (c *PostgreDb) QueryLicenseExpiredThisMonthCount() (config.DataLicense, error) {
+	var data config.DataLicense
+	rows, err := c.db.Query("SELECT * FROM mv_license_plate_expired_this_month")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.DataLicense{
+			Api:   "License",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func GetLicenseExpiredThisMonthTotal() (config.DataLicense, error) {
+	var cfg config.DBConfig
+	var data config.DataLicense
+	cfg = LoadDBConfig()
+	db2, _ := ConnectDevicesDB(cfg)
+	data, _ = db2.QueryLicenseExpiredThisMonthCount()
+	return data, nil
+}
+
+func (c *PostgreDb) QueryLicenseExpiredThisYearCount() (config.DataLicense, error) {
+	var data config.DataLicense
+	rows, err := c.db.Query("SELECT * FROM mv_license_plate_expired_this_year")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.DataLicense{
+			Api:   "License",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func GetLicenseExpiredThisYearTotal() (config.DataLicense, error) {
+	var cfg config.DBConfig
+	var data config.DataLicense
+	cfg = LoadDBConfig()
+	db2, _ := ConnectDevicesDB(cfg)
+	data, _ = db2.QueryLicenseExpiredThisYearCount()
+	return data, nil
+}
 func (c *PostgreDb) QueryLicenseNewTodayCount() (config.DataLicense, error) {
 	var data config.DataLicense
 	rows, err := c.db.Query("SELECT * FROM mv_license_plate_new_today")
@@ -1252,6 +1483,106 @@ func GetLicenseValidThisMonthTotal() (config.DataLicense, error) {
 	db2, _ := ConnectDevicesDB(cfg)
 	data, _ = db2.QueryLicenseValidThisMonthCount()
 	return data, nil
+}
+
+func (c *PostgreDb) QueryLicenseReNewTodayCount() (config.DataLicense, error) {
+	var data config.DataLicense
+	rows, err := c.db.Query("SELECT * FROM mv_license_plate_renew_today_1")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.DataLicense{
+			Api:   "License",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func GetLicenseReNewToday() (config.DataLicense, error) {
+	var cfg config.DBConfig
+	var data config.DataLicense
+	cfg = LoadDBConfig()
+	db2, _ := ConnectAttributesDB(cfg)
+	data, _ = db2.QueryLicenseReNewTodayCount()
+	return data, nil
+}
+
+func (c *PostgreDb) QueryLicenseReNewThisMonthCount() (config.DataLicense, error) {
+	var data config.DataLicense
+	rows, err := c.db.Query("SELECT * FROM mv_license_plate_renew_this_month_1")
+	if err != nil {
+		fmt.Printf("Loi get db", err)
+		return data, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var total float64
+		if err := rows.Scan(&total); err != nil {
+			fmt.Printf("Loi scan db ", err)
+			return data, err
+		}
+		data = config.DataLicense{
+			Api:   "License",
+			Value: total,
+		}
+	}
+	return data, nil
+}
+
+func GetLicenseReNewThisMonth() (config.DataLicense, error) {
+	var cfg config.DBConfig
+	var data config.DataLicense
+	cfg = LoadDBConfig()
+	db2, _ := ConnectAttributesDB(cfg)
+	data, _ = db2.QueryLicenseReNewThisMonthCount()
+	return data, nil
+}
+
+func (c *PostgreDb) BatchInsertApiLogs(logs []ApiLog) error {
+	if len(logs) == 0 {
+		return nil
+	}
+
+	tx, err := c.db.Begin()
+	if err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO api_logs (url, status_code, latency, timestamp)
+		VALUES ($1,$2,$3,$4)
+	`)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+
+	for _, l := range logs {
+		_, err := stmt.Exec(
+			l.Url,
+			l.StatusCode,
+			l.Latency,
+			l.Timestamp,
+		)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (c *PostgreDb) SetDowntimeDB(pod string, downtime, total uint64) {

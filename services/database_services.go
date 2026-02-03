@@ -12,6 +12,53 @@ import (
 	"net/http"
 	"time"
 )
+// NEWWWWW
+var (
+	apiLogQueue = make(chan model.ApiLog, 20000)
+	batchSize   = 1000
+)
+
+func EnqueueApiLog(logItem model.ApiLog) {
+	select {
+	case apiLogQueue <- logItem:
+	default:
+		log.Println("[WARN] api log queue full, dropping log")
+	}
+}
+
+func StartApiLogWorker() {
+	go func() {
+		buffer := make([]model.ApiLog, 0, batchSize)
+		ticker := time.NewTicker(5 * time.Second)
+
+		for {
+			select {
+			case logItem := <-apiLogQueue:
+				buffer = append(buffer, logItem)
+				if len(buffer) >= batchSize {
+					flushApiLog(buffer)
+					buffer = buffer[:0]
+				}
+			case <-ticker.C:
+				if len(buffer) > 0 {
+					flushApiLog(buffer)
+					buffer = buffer[:0]
+				}
+			}
+		}
+	}()
+}
+
+func flushApiLog(logs []model.ApiLog) {
+	db := model.ConnectTransDb()
+	defer db.db.Close()
+
+	if err := db.BatchInsertApiLogs(logs); err != nil {
+		log.Printf("[ERROR] batch insert api logs failed: %v", err)
+	}
+}
+
+//NEWWW
 
 func GetOpsMongo(c *gin.Context) []MongoData {
 	var response Systemreponse
@@ -460,6 +507,71 @@ func PgRequestTrackingKpi(c *gin.Context) config.SuccessKpi {
 	var data config.SuccessKpi
 	data, _ = model.GetRequestTrackingTotal(c)
 	return data
+}
+
+func mapTransaction(q config.TransactionQuery) config.TransactionDb {
+    var body *string
+    if q.ResponseBody.Valid {
+        body = &q.ResponseBody.String
+    }
+
+    var serviceName string
+    if q.ServiceName.Valid {
+        serviceName = q.ServiceName.String
+    }
+
+    status := 0
+    if q.StatusCode.Valid {
+        status = int(q.StatusCode.Int32)
+    }
+
+    return config.TransactionDb{
+        Method:       q.Method,
+        URL:          q.URL,
+        StatusCode:   status,
+        ResponseBody: body,
+        ServiceName:  serviceName,
+        Latency:      q.Latency,
+        TS:           q.TS,
+        UserID:       q.UserID,
+        ProjectID:    q.ProjectID,
+    }
+}
+
+
+
+
+func GetTransactions(c *gin.Context, url string, offset, limit int) ([]config.TransactionDb, error) {
+	queryTxs, err := model.GetTransactions(c, url, offset, limit)
+	if err != nil {
+		fmt.Println("services ",err)
+		return nil, err
+	}
+
+	results := make([]config.TransactionDb, 0, len(queryTxs))
+	for _, tx := range queryTxs {
+		results = append(results, mapTransaction(tx))
+		fmt.Printf("Service url : %s, response_body: %s, latency: %s, status_code: %s\n", tx.URL, tx.ResponseBody, tx.Latency, tx.StatusCode)
+	}
+
+	return results, nil
+}
+
+func GetLatencyPercentileByURLService(
+	c *gin.Context,
+	url string,
+) (config.LatencyPercentileResult, error) {
+
+	var cfg config.DBConfig
+	cfg = model.LoadDBConfig()
+
+	db, err := model.ConnectTransDB(cfg)
+	if err != nil {
+		return config.LatencyPercentileResult{}, err
+	}
+	defer db.db.Close()
+
+	return db.QueryLatencyPercentileByURL(url)
 }
 
 func ExportKpiToExcel() {

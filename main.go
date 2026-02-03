@@ -21,17 +21,17 @@ func main() {
 	//db, _ := model.ConnectPoolDB(cfg)
 	//defer db.Close()
 	//db2, _ := model.ConnectTransDB(cfg)
-	//go func() {
-	//	for {
-	//		GetCpuUsage()
-	//		//services.MonitorKpiApi(db)
-	//		//db.QueryData()
-	//		//db2.QueryLatency()
-	//		time.Sleep(60 * time.Second)
-	//	}
-	//}()
 	go func() {
-		for {						
+		for {
+			GetCpuUsage()
+			//services.MonitorKpiApi(db)
+			//db.QueryData()
+			//db2.QueryLatency()
+			time.Sleep(60 * time.Second)
+		}
+	}()
+	go func() {
+		for {
 			now := time.Now()
 			next := time.Date(now.Year(), now.Month(), now.Day(), 1, 0, 0, 0, time.Local)
 			if now.After(next) {
@@ -39,14 +39,16 @@ func main() {
 			}
 			sleepDuration := next.Sub(now)
 			fmt.Printf("Next email will be sent at %s (sleeping for %s)\n", next.Format("2006-01-02 15:04:05"), sleepDuration)
-			time.Sleep(sleepDuration)	
+			time.Sleep(sleepDuration)
+			fmt.Printf("Send mail\n")
 			mail := services.ContentEmail()
 			err := services.SendMail(mail.Subject, mail.Body)
 			if err != nil {
 				fmt.Printf("Send mail error %s \n", err)
-			}											
+			}			
 		}
 	}()
+	services.StartApiLogWorker()
 	r := routes.SetupRouter()
 	err := r.Run(":8933")
 	if err != nil {
@@ -56,5 +58,5 @@ func main() {
 }
 
 func GetCpuUsage() {
-	fmt.Print("Monitor 27022025\n")
+	fmt.Print("Monitor 03022026\n")
 }
