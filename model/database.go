@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -94,6 +95,45 @@ type ApiLog struct {
 	Timestamp  time.Time
 }
 
+// --- shared DB pools ---
+var (
+	mainDB       *sql.DB
+	transDB      *sql.DB
+	devicesDB    *sql.DB
+	attributesDB *sql.DB
+	mainSQLX     *sqlx.DB
+
+	mainOnce, transOnce, devicesOnce, attributesOnce             sync.Once
+	mainInitErr, transInitErr, devicesInitErr, attributesInitErr error
+)
+
+const (
+	defaultMaxOpenConns    = 50
+	defaultMaxIdleConns    = 10
+	defaultConnMaxLifetime = 30 * time.Minute
+	defaultQueryTimeout    = 5 * time.Second
+)
+
+func configurePool(db *sql.DB, cfg config.DBConfig) {
+	maxOpen := defaultMaxOpenConns
+	maxIdle := defaultMaxIdleConns
+	lifetime := defaultConnMaxLifetime
+
+	if cfg.MaxConn > 0 {
+		maxOpen = int(cfg.MaxConn)
+	}
+	if cfg.MinConn > 0 {
+		maxIdle = int(cfg.MinConn)
+	}
+	if cfg.MaxConnLifeTime > 0 {
+		lifetime = cfg.MaxConnLifeTime
+	}
+
+	db.SetMaxOpenConns(maxOpen)
+	db.SetMaxIdleConns(maxIdle)
+	db.SetConnMaxLifetime(lifetime)
+}
+
 func LoadDBConfig() config.DBConfig {
 	return config.DBConfig{
 		Host:              config.Env(config.EnvDBHost, config.DefDBHost),
@@ -125,21 +165,37 @@ func Connect(cfg config.DBConfig) (*sqlx.DB, error) {
 func ConnectToDb() *sqlx.DB {
 	var cfg config.DBConfig
 	cfg = LoadDBConfig()
-	db, err := Connect(cfg)
-	if err != nil {
-		log.Fatalln(err)
+	mainOnce.Do(func() {
+		url := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", cfg.Host, cfg.Port, cfg.User, cfg.Name, cfg.Pass, cfg.SSLMode, cfg.SSLCert, cfg.SSLKey, cfg.SSLRootcert)
+		var db *sql.DB
+		db, mainInitErr = sql.Open("postgres", url)
+		if mainInitErr == nil {
+			configurePool(db, cfg)
+			mainDB = db
+			mainSQLX = sqlx.NewDb(db, "postgres")
+		}
+	})
+	if mainInitErr != nil {
+		log.Fatalln(mainInitErr)
 	}
-	return db
+	return mainSQLX
 }
 
 func ConnectNewDB(cfg config.DBConfig) (*PostgreDb, error) {
-	url := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", cfg.Host, cfg.Port, cfg.User, cfg.Name, cfg.Pass, cfg.SSLMode, cfg.SSLCert, cfg.SSLKey, cfg.SSLRootcert)
-
-	db, err := sql.Open("postgres", url)
-	if err != nil {
-		return nil, err
+	mainOnce.Do(func() {
+		url := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", cfg.Host, cfg.Port, cfg.User, cfg.Name, cfg.Pass, cfg.SSLMode, cfg.SSLCert, cfg.SSLKey, cfg.SSLRootcert)
+		var db *sql.DB
+		db, mainInitErr = sql.Open("postgres", url)
+		if mainInitErr == nil {
+			configurePool(db, cfg)
+			mainDB = db
+			mainSQLX = sqlx.NewDb(db, "postgres")
+		}
+	})
+	if mainInitErr != nil {
+		return nil, mainInitErr
 	}
-	return &PostgreDb{db}, nil
+	return &PostgreDb{mainDB}, nil
 }
 
 func ConnectToNewDb() *PostgreDb {
@@ -155,31 +211,52 @@ func ConnectToNewDb() *PostgreDb {
 func ConnectTransDB(cfg config.DBConfig) (*PostgreDb, error) {
 	url := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", cfg.Host, cfg.Port, cfg.User, "transactions", cfg.Pass, cfg.SSLMode, cfg.SSLCert, cfg.SSLKey, cfg.SSLRootcert)
 
-	db, err := sql.Open("postgres", url)
-	if err != nil {
-		return nil, err
+	transOnce.Do(func() {
+		var db *sql.DB
+		db, transInitErr = sql.Open("postgres", url)
+		if transInitErr == nil {
+			configurePool(db, cfg)
+			transDB = db
+		}
+	})
+	if transInitErr != nil {
+		return nil, transInitErr
 	}
-	return &PostgreDb{db}, nil
+	return &PostgreDb{transDB}, nil
 }
 
 func ConnectDevicesDB(cfg config.DBConfig) (*PostgreDb, error) {
 	url := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", cfg.Host, cfg.Port, cfg.User, "devices", cfg.Pass, cfg.SSLMode, cfg.SSLCert, cfg.SSLKey, cfg.SSLRootcert)
 
-	db, err := sql.Open("postgres", url)
-	if err != nil {
-		return nil, err
+	devicesOnce.Do(func() {
+		var db *sql.DB
+		db, devicesInitErr = sql.Open("postgres", url)
+		if devicesInitErr == nil {
+			configurePool(db, cfg)
+			devicesDB = db
+		}
+	})
+	if devicesInitErr != nil {
+		return nil, devicesInitErr
 	}
-	return &PostgreDb{db}, nil
+	return &PostgreDb{devicesDB}, nil
 }
 
 func ConnectAttributesDB(cfg config.DBConfig) (*PostgreDb, error) {
 	url := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", cfg.Host, cfg.Port, cfg.User, "attributes", cfg.Pass, cfg.SSLMode, cfg.SSLCert, cfg.SSLKey, cfg.SSLRootcert)
 
-	db, err := sql.Open("postgres", url)
-	if err != nil {
-		return nil, err
+	attributesOnce.Do(func() {
+		var db *sql.DB
+		db, attributesInitErr = sql.Open("postgres", url)
+		if attributesInitErr == nil {
+			configurePool(db, cfg)
+			attributesDB = db
+		}
+	})
+	if attributesInitErr != nil {
+		return nil, attributesInitErr
 	}
-	return &PostgreDb{db}, nil
+	return &PostgreDb{attributesDB}, nil
 }
 
 func ConnectPoolDB(cfg config.DBConfig) (*PostgreDB, error) {
@@ -239,7 +316,10 @@ func (c *PostgreDb) QueryData() error {
 func (c *PostgreDb) QueryLatency() (config.LatencyKpi, error) {
 	fmt.Print("query data")
 	var data config.LatencyKpi
-	rows, err := c.db.Query("SELECT * FROM mv_transactions_overall_latency")
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
+
+	rows, err := c.db.QueryContext(ctx, "SELECT * FROM mv_transactions_overall_latency")
 	//rows, err := c.db.Query("WITH Percentile AS (\n    SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n),\nStats AS (\n    SELECT\n        COUNT(*) AS total_records,\n        COUNT(*) FILTER (WHERE latency < 5000) AS count_latency_below_5\n    FROM transactions\n)\nSELECT\n    s.count_latency_below_5,\n    p.percentile_95 AS latency_95th_percentile,\n    s.total_records,\n    CASE\n        WHEN s.count_latency_below_5 > (0.95 * s.total_records) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Stats s, Percentile p")
 	if err != nil {
 		fmt.Printf("Loi get db", err)
@@ -268,7 +348,10 @@ func (c *PostgreDb) QueryLatency() (config.LatencyKpi, error) {
 }
 func (p *PostgreDB) QueryLatencyPool() (config.LatencyKpi, error) {
 	var data config.LatencyKpi
-	conn, err := p.pool.Acquire(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
+
+	conn, err := p.pool.Acquire(ctx)
 	if err != nil {
 		return data, err
 	}
@@ -277,7 +360,7 @@ func (p *PostgreDB) QueryLatencyPool() (config.LatencyKpi, error) {
 	var latency sql.NullString
 	var total sql.NullString
 	var result sql.NullString
-	err = conn.QueryRow(context.Background(), `WITH Percentile AS (
+	err = conn.QueryRow(ctx, `WITH Percentile AS (
 SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95
     FROM transactions
 )
@@ -336,15 +419,17 @@ func GetOverallLatencyPool(c *gin.Context) (config.LatencyKpi, error) {
 
 // Get transactions data
 
-
 func (c *PostgreDb) QueryTransactions(url string, offset, limit int) ([]config.TransactionQuery, error) {
 	var (
 		rows *sql.Rows
 		err  error
 	)
 
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
+
 	if url != "" {
-		rows, err = c.db.Query(`
+		rows, err = c.db.QueryContext(ctx, `
 			SELECT
 				method,
 				url,
@@ -361,7 +446,7 @@ func (c *PostgreDb) QueryTransactions(url string, offset, limit int) ([]config.T
 			LIMIT $2 OFFSET $3
 		`, "%"+url+"%", limit, offset)
 	} else {
-		rows, err = c.db.Query(`
+		rows, err = c.db.QueryContext(ctx, `
 			SELECT
 				method,
 				url,
@@ -413,7 +498,6 @@ func (c *PostgreDb) QueryTransactions(url string, offset, limit int) ([]config.T
 	return results, nil
 }
 
-
 func GetTransactions(c *gin.Context, url string, offset int, limit int) ([]config.TransactionQuery, error) {
 	var cfg config.DBConfig
 	var data []config.TransactionQuery
@@ -428,6 +512,8 @@ func (c *PostgreDb) QueryLatencyPercentileByURL(
 ) (config.LatencyPercentileResult, error) {
 
 	var result config.LatencyPercentileResult
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
 
 	query := `
 	WITH Percentile AS (
@@ -460,7 +546,7 @@ func (c *PostgreDb) QueryLatencyPercentileByURL(
 	FROM Stats s, Percentile p
 	`
 
-	row := c.db.QueryRow(query, "%"+url+"%")
+	row := c.db.QueryRowContext(ctx, query, "%"+url+"%")
 
 	err := row.Scan(
 		&result.CountBelow5,
@@ -474,7 +560,6 @@ func (c *PostgreDb) QueryLatencyPercentileByURL(
 
 	return result, nil
 }
-
 
 func (c *PostgreDb) QueryLoginLatency() (config.LatencyKpi, error) {
 	fmt.Print("query data")
@@ -1554,12 +1639,15 @@ func (c *PostgreDb) BatchInsertApiLogs(logs []ApiLog) error {
 		return nil
 	}
 
-	tx, err := c.db.Begin()
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
+
+	tx, err := c.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 
-	stmt, err := tx.Prepare(`
+	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO api_logs (url, status_code, latency, timestamp)
 		VALUES ($1,$2,$3,$4)
 	`)
@@ -1570,7 +1658,7 @@ func (c *PostgreDb) BatchInsertApiLogs(logs []ApiLog) error {
 	defer stmt.Close()
 
 	for _, l := range logs {
-		_, err := stmt.Exec(
+		_, err := stmt.ExecContext(ctx,
 			l.Url,
 			l.StatusCode,
 			l.Latency,
@@ -1808,6 +1896,9 @@ func SetCpu(server string, value uint64) {
 func (c *PostgreDb) SetRamUsage(server string, total uint64, avail uint64) {
 
 	created_time := time.Now()
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
+
 	query := `	WITH inserted AS (
 		INSERT INTO ramusage (server, total, avail, timestamp)
 		VALUES ($1, $2, $3, $4)
@@ -1824,7 +1915,7 @@ func (c *PostgreDb) SetRamUsage(server string, total uint64, avail uint64) {
 		RETURNING ctid
 	)
 	SELECT 1`
-	_, err := c.db.Exec(query, server, total, avail, created_time)
+	_, err := c.db.ExecContext(ctx, query, server, total, avail, created_time)
 	if err != nil {
 		log.Printf("Failed to insert data into PostgreSQL: %v", err)
 	} else {
@@ -1842,4 +1933,20 @@ func SetRam(server string, total, avail uint64) {
 
 func (c *PostgreDb) SetDownTimeKpi(data config.KpiData) {
 
+}
+
+// CloseAllPools gracefully closes all shared DB pools.
+func CloseAllPools() {
+	if mainDB != nil {
+		_ = mainDB.Close()
+	}
+	if transDB != nil {
+		_ = transDB.Close()
+	}
+	if devicesDB != nil {
+		_ = devicesDB.Close()
+	}
+	if attributesDB != nil {
+		_ = attributesDB.Close()
+	}
 }

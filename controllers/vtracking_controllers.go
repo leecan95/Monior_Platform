@@ -2,15 +2,18 @@ package controllers
 
 import (
 	"Monitor_Platform/config"
+	"Monitor_Platform/model"
 	"Monitor_Platform/services"
 	"Monitor_Platform/validations"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"strconv"
 	"strings"
+	"time"
 )
- //NEW
- 
+
+//NEW
+
 type ApiLogRequest struct {
 	Url        string `json:"url" binding:"required"`
 	StatusCode int    `json:"status_code" binding:"required"`
@@ -36,6 +39,7 @@ func CollectApiLogController(c *gin.Context) {
 
 	c.JSON(200, gin.H{"message": "accepted"})
 }
+
 // NEWWWW
 func GetUsersTPSController(c *gin.Context) {
 	values := services.GetUsersTPS(c)
@@ -364,8 +368,6 @@ func GetLatencyPercentileByURLController(c *gin.Context) {
 
 	c.JSON(200, result)
 }
-
-
 
 func GetKpiRequestDBReportController(c *gin.Context) {
 	var data config.SuccessKpi

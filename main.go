@@ -2,9 +2,15 @@ package main
 
 import (
 	"Monitor_Platform/config"
+	"Monitor_Platform/model"
 	"Monitor_Platform/routes"
 	"Monitor_Platform/services"
+	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
@@ -45,16 +51,33 @@ func main() {
 			err := services.SendMail(mail.Subject, mail.Body)
 			if err != nil {
 				fmt.Printf("Send mail error %s \n", err)
-			}			
+			}
 		}
 	}()
 	services.StartApiLogWorker()
 	r := routes.SetupRouter()
-	err := r.Run(":8933")
-	if err != nil {
-		panic(err)
+	srv := &http.Server{
+		Addr:    ":8933",
+		Handler: r,
 	}
-	select {}
+
+	// start server
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			panic(err)
+		}
+	}()
+
+	// wait for shutdown signal
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_ = srv.Shutdown(ctx)
+	model.CloseAllPools()
 }
 
 func GetCpuUsage() {

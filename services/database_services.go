@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"time"
 )
+
 // NEWWWWW
 var (
 	apiLogQueue = make(chan model.ApiLog, 20000)
@@ -50,8 +51,7 @@ func StartApiLogWorker() {
 }
 
 func flushApiLog(logs []model.ApiLog) {
-	db := model.ConnectTransDb()
-	defer db.db.Close()
+	db := model.ConnectToTransDb()
 
 	if err := db.BatchInsertApiLogs(logs); err != nil {
 		log.Printf("[ERROR] batch insert api logs failed: %v", err)
@@ -510,41 +510,38 @@ func PgRequestTrackingKpi(c *gin.Context) config.SuccessKpi {
 }
 
 func mapTransaction(q config.TransactionQuery) config.TransactionDb {
-    var body *string
-    if q.ResponseBody.Valid {
-        body = &q.ResponseBody.String
-    }
+	var body *string
+	if q.ResponseBody.Valid {
+		body = &q.ResponseBody.String
+	}
 
-    var serviceName string
-    if q.ServiceName.Valid {
-        serviceName = q.ServiceName.String
-    }
+	var serviceName string
+	if q.ServiceName.Valid {
+		serviceName = q.ServiceName.String
+	}
 
-    status := 0
-    if q.StatusCode.Valid {
-        status = int(q.StatusCode.Int32)
-    }
+	status := 0
+	if q.StatusCode.Valid {
+		status = int(q.StatusCode.Int32)
+	}
 
-    return config.TransactionDb{
-        Method:       q.Method,
-        URL:          q.URL,
-        StatusCode:   status,
-        ResponseBody: body,
-        ServiceName:  serviceName,
-        Latency:      q.Latency,
-        TS:           q.TS,
-        UserID:       q.UserID,
-        ProjectID:    q.ProjectID,
-    }
+	return config.TransactionDb{
+		Method:       q.Method,
+		URL:          q.URL,
+		StatusCode:   status,
+		ResponseBody: body,
+		ServiceName:  serviceName,
+		Latency:      q.Latency,
+		TS:           q.TS,
+		UserID:       q.UserID,
+		ProjectID:    q.ProjectID,
+	}
 }
-
-
-
 
 func GetTransactions(c *gin.Context, url string, offset, limit int) ([]config.TransactionDb, error) {
 	queryTxs, err := model.GetTransactions(c, url, offset, limit)
 	if err != nil {
-		fmt.Println("services ",err)
+		fmt.Println("services ", err)
 		return nil, err
 	}
 
@@ -569,7 +566,6 @@ func GetLatencyPercentileByURLService(
 	if err != nil {
 		return config.LatencyPercentileResult{}, err
 	}
-	defer db.db.Close()
 
 	return db.QueryLatencyPercentileByURL(url)
 }
