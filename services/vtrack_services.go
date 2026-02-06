@@ -9,7 +9,9 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 )
 
 func GetUsersTPS(c *gin.Context) interface{} {
@@ -2205,9 +2207,23 @@ func GetKpiLatencyVtrack(c *gin.Context) []KpiData {
 
 func GetPrometheus(c *gin.Context, query string) interface{} {
 	var response map[string]interface{}
-	url := config.PrometheusUrl
-	params := "?query=" + query
-	resp, err := http.Get(url + params)
+	baseURL := config.PrometheusUrl
+
+	// Sanitize and encode the query to avoid invalid characters (e.g. newlines, quotes)
+	cleanQuery := strings.TrimSpace(query)
+
+	parsedURL, err := url.Parse(baseURL)
+	if err != nil {
+		log.Printf("error parsing prometheus base url: %s", err)
+		c.Error(err)
+		return ""
+	}
+
+	q := parsedURL.Query()
+	q.Set("query", cleanQuery)
+	parsedURL.RawQuery = q.Encode()
+
+	resp, err := http.Get(parsedURL.String())
 	if err != nil {
 		log.Printf("error in services %s", err)
 		c.Error(err)

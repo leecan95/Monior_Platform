@@ -84,7 +84,8 @@ func SetupRouter() *gin.Engine {
 	route.GET("ems/mqtt/client/connect", controllers.GetMqttClientController)
 	route.GET("ems/mqtt/message/receive", controllers.GetRateMqttMessageController)
 	route.GET("ems/prometheus", middlewares.ValidateQueryMiddleware, controllers.GetPrometheusController)
-
+	route.POST("ems/kpi/logs", controllers.CollectApiLogController)
+	route.POST("ems/kpi/daily", controllers.CollectDailyApiKpiController)
 	// Endpoint to get metrics
 	// Middleware để ghi log vào metric
 	route.Use(func(c *gin.Context) {

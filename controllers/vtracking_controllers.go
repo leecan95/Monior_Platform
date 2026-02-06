@@ -2,13 +2,81 @@ package controllers
 
 import (
 	"Monitor_Platform/config"
+	"Monitor_Platform/model"
 	"Monitor_Platform/services"
 	"Monitor_Platform/validations"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// POST /ems/kpi/logs
+type ApiLogRequest struct {
+	Url        string `json:"url" binding:"required"`
+	StatusCode int    `json:"status_code" binding:"required"`
+	Latency    int64  `json:"latency" binding:"required"`
+	Timestamp  int64  `json:"timestamp"`
+}
+
+// POST /ems/kpi/daily
+type DailyApiKpiRequest struct {
+	Url             string  `json:"url" binding:"required"`
+	TotalUsers      int64   `json:"total_users" binding:"required"`
+	CrashUsers      int64   `json:"crash_users" binding:"required"`
+	NonCrashPercent float64 `json:"non_crash_percent" binding:"required"`
+	KpiDate         string  `json:"kpi_date" binding:"required"` // format: YYYY-MM-DD
+}
+
+func CollectApiLogController(c *gin.Context) {
+	var req ApiLogRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	ts := time.Now()
+	if req.Timestamp > 0 {
+		ts = time.UnixMilli(req.Timestamp)
+	}
+
+	logItem := model.ApiLog{
+		Url:        req.Url,
+		StatusCode: req.StatusCode,
+		Latency:    req.Latency,
+		Timestamp:  ts,
+	}
+
+	services.EnqueueApiLog(logItem)
+	c.JSON(200, gin.H{"message": "accepted"})
+}
+
+// CollectDailyApiKpiController handles POST /ems/kpi/daily to insert daily_api_kpi rows via async queue.
+func CollectDailyApiKpiController(c *gin.Context) {
+	var req DailyApiKpiRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	kpiDate, err := time.Parse("2006-01-02", strings.TrimSpace(req.KpiDate))
+	if err != nil {
+		c.JSON(400, gin.H{"error": "invalid kpi_date, expected YYYY-MM-DD"})
+		return
+	}
+
+	row := model.DailyApiKpi{
+		Url:             req.Url,
+		TotalUsers:      req.TotalUsers,
+		CrashUsers:      req.CrashUsers,
+		NonCrashPercent: req.NonCrashPercent,
+		KpiDate:         kpiDate,
+	}
+
+	services.EnqueueDailyApiKpi(row)
+	c.JSON(200, gin.H{"message": "accepted"})
+}
 
 func GetUsersTPSController(c *gin.Context) {
 	values := services.GetUsersTPS(c)

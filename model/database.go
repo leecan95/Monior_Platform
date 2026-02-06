@@ -2,6 +2,7 @@ package model
 
 import (
 	"Monitor_Platform/config"
+	"context"
 	"github.com/gin-gonic/gin"
 	"strconv"
 	"time"
@@ -46,6 +47,15 @@ CREATE TABLE kpimodule (
 type PostgreDb struct {
 	db *sql.DB
 }
+
+// Close closes underlying sql.DB
+func (p *PostgreDb) Close() error {
+	if p == nil || p.db == nil {
+		return nil
+	}
+	return p.db.Close()
+}
+
 type CpuUsage struct {
 	ID        int     `db:"id"`
 	CpuID     int     `db:"cpu_id"`
@@ -69,6 +79,25 @@ type Place struct {
 	Country string
 	City    sql.NullString
 	TelCode int
+}
+
+const defaultQueryTimeout = 5 * time.Second
+
+// ApiLog represents an API log entry written by /ems/kpi/logs.
+type ApiLog struct {
+	Url        string
+	StatusCode int
+	Latency    int64
+	Timestamp  time.Time
+}
+
+// DailyApiKpi represents aggregated daily KPI metrics per API.
+type DailyApiKpi struct {
+	Url             string
+	TotalUsers      int64
+	CrashUsers      int64
+	NonCrashPercent float64
+	KpiDate         time.Time
 }
 
 func LoadDBConfig() config.DBConfig {
@@ -139,6 +168,62 @@ func ConnectTransDB(cfg config.DBConfig) (*PostgreDb, error) {
 	return &PostgreDb{db}, nil
 }
 
+// BatchInsertApiLogs inserts a slice of ApiLog into the api_logs table.
+func (c *PostgreDb) BatchInsertApiLogs(logs []ApiLog) error {
+	if len(logs) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
+
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO api_logs (url, status_code, latency, timestamp) VALUES ($1,$2,$3,$4)`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+
+	for _, l := range logs {
+		if _, err := stmt.ExecContext(ctx, l.Url, l.StatusCode, l.Latency, l.Timestamp); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// BatchInsertDailyApiKpi inserts a slice of DailyApiKpi into the daily_api_kpi table.
+func (c *PostgreDb) BatchInsertDailyApiKpi(rows []DailyApiKpi) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
+
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO daily_api_kpi (url, total_users, crash_users, non_crash_percent, kpi_date) VALUES ($1,$2,$3,$4,$5)`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+
+	for _, row := range rows {
+		if _, err := stmt.ExecContext(ctx, row.Url, row.TotalUsers, row.CrashUsers, row.NonCrashPercent, row.KpiDate); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func ConnectToTransDb() *PostgreDb {
 	var cfg config.DBConfig
 	cfg = LoadDBConfig()
@@ -153,7 +238,7 @@ func (c *PostgreDb) QueryData() error {
 	fmt.Print("query data")
 	rows, err := c.db.Query("select * from kpimodule")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return err
 	}
 	defer rows.Close()
@@ -162,7 +247,7 @@ func (c *PostgreDb) QueryData() error {
 		var value string
 		var time string
 		if err := rows.Scan(&pod, &value, &time); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return err
 		}
 		fmt.Printf("Pod : %s, Value: %s, Time: %s\n", pod, value, time)
@@ -175,7 +260,7 @@ func (c *PostgreDb) QueryLatency() (config.LatencyKpi, error) {
 	var data config.LatencyKpi
 	rows, err := c.db.Query("WITH Percentile AS (\nSELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5) AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions) AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5) > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions)) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -185,7 +270,7 @@ func (c *PostgreDb) QueryLatency() (config.LatencyKpi, error) {
 		var total string
 		var result string
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
@@ -214,7 +299,7 @@ func (c *PostgreDb) QueryLoginLatency() (config.LatencyKpi, error) {
 	var data config.LatencyKpi
 	rows, err := c.db.Query("WITH Percentile AS (\n    SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n    WHERE url = '/app/vtracking/login'\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url = '/app/vtracking/login') AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions WHERE url = '/app/vtracking/login') AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url = '/app/vtracking/login') > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions WHERE url = '/app/vtracking/login')) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -224,7 +309,7 @@ func (c *PostgreDb) QueryLoginLatency() (config.LatencyKpi, error) {
 		var total string
 		var result string
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
@@ -253,7 +338,7 @@ func (c *PostgreDb) QueryReportLatency() (config.LatencyKpi, error) {
 	var data config.LatencyKpi
 	rows, err := c.db.Query("WITH Percentile AS (\n    SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n    WHERE url LIKE '%attributes/vtracking/report/overview%'\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url LIKE '%attributes/vtracking/report/overview%') AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions WHERE url LIKE '%attributes/vtracking/report/overview%') AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url LIKE '%attributes/vtracking/report/overview%') > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions WHERE url LIKE '%attributes/vtracking/report/overview%')) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -263,7 +348,7 @@ func (c *PostgreDb) QueryReportLatency() (config.LatencyKpi, error) {
 		var total string
 		var result string
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
@@ -292,7 +377,7 @@ func (c *PostgreDb) QueryGetimageLatency() (config.LatencyKpi, error) {
 	var data config.LatencyKpi
 	rows, err := c.db.Query("WITH Percentile AS (\nSELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5) AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions) AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5) > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions)) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -302,7 +387,7 @@ func (c *PostgreDb) QueryGetimageLatency() (config.LatencyKpi, error) {
 		var total string
 		var result string
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
@@ -331,7 +416,7 @@ func (c *PostgreDb) QueryTrackingLatency() (config.LatencyKpi, error) {
 	var data config.LatencyKpi
 	rows, err := c.db.Query("WITH Percentile AS (\n    SELECT PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY latency) AS percentile_95\n    FROM transactions\n    WHERE url LIKE '%attributes/vtracking/logged/VEHICLE/%'\n)\nSELECT \n    (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url LIKE '%attributes/vtracking/logged/VEHICLE/%') AS count_latency_below_5,\n    (SELECT percentile_95 FROM Percentile) AS latency_95th_percentile,\n    (SELECT COUNT(*) FROM transactions WHERE url LIKE '%attributes/vtracking/logged/VEHICLE/%') AS total_records,\n    CASE\n        WHEN (SELECT COUNT(*) FROM transactions WHERE latency < 5 AND url LIKE '%attributes/vtracking/logged/VEHICLE/%') > ((SELECT percentile_95 FROM Percentile) * 0.95 * (SELECT COUNT(*) FROM transactions WHERE url LIKE '%attributes/vtracking/logged/VEHICLE/%')) THEN 'Yes'\n        ELSE 'No'\n    END AS exceeds_95_percent\nFROM Percentile")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -341,7 +426,7 @@ func (c *PostgreDb) QueryTrackingLatency() (config.LatencyKpi, error) {
 		var total string
 		var result string
 		if err := rows.Scan(&count, &latency, &total, &result); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.LatencyKpi{
@@ -370,7 +455,7 @@ func (c *PostgreDb) QueryRequestCount() (config.SuccessKpi, error) {
 	var data config.SuccessKpi
 	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -378,7 +463,7 @@ func (c *PostgreDb) QueryRequestCount() (config.SuccessKpi, error) {
 	for rows.Next() {
 		var total float64
 		if err := rows.Scan(&total); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.SuccessKpi{
@@ -394,7 +479,7 @@ func (c *PostgreDb) QuerySuccessRequestCount() (config.SuccessKpi, error) {
 	var data config.SuccessKpi
 	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions WHERE response_body NOT LIKE '%\"code\"%'")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -402,7 +487,7 @@ func (c *PostgreDb) QuerySuccessRequestCount() (config.SuccessKpi, error) {
 	for rows.Next() {
 		var total float64
 		if err := rows.Scan(&total); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.SuccessKpi{
@@ -432,7 +517,7 @@ func (c *PostgreDb) QueryRequestLoginCount() (config.SuccessKpi, error) {
 	var data config.SuccessKpi
 	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\nWHERE url = '/app/vtracking/login'")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -440,7 +525,7 @@ func (c *PostgreDb) QueryRequestLoginCount() (config.SuccessKpi, error) {
 	for rows.Next() {
 		var total float64
 		if err := rows.Scan(&total); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.SuccessKpi{
@@ -456,7 +541,7 @@ func (c *PostgreDb) QuerySuccessRequestLoginCount() (config.SuccessKpi, error) {
 	var data config.SuccessKpi
 	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\nWHERE response_body NOT LIKE '%\"code\"%'\n    AND url = '/app/vtracking/login'")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -464,7 +549,7 @@ func (c *PostgreDb) QuerySuccessRequestLoginCount() (config.SuccessKpi, error) {
 	for rows.Next() {
 		var total float64
 		if err := rows.Scan(&total); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.SuccessKpi{
@@ -494,7 +579,7 @@ func (c *PostgreDb) QueryRequestReportCount() (config.SuccessKpi, error) {
 	var data config.SuccessKpi
 	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\n WHERE url LIKE '%attributes/vtracking/report/overview%'")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -502,7 +587,7 @@ func (c *PostgreDb) QueryRequestReportCount() (config.SuccessKpi, error) {
 	for rows.Next() {
 		var total float64
 		if err := rows.Scan(&total); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.SuccessKpi{
@@ -518,7 +603,7 @@ func (c *PostgreDb) QuerySuccessRequestReportCount() (config.SuccessKpi, error) 
 	var data config.SuccessKpi
 	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions WHERE response_body NOT LIKE '%\"code\"%' AND url LIKE '%attributes/vtracking/report/overview%'")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -526,7 +611,7 @@ func (c *PostgreDb) QuerySuccessRequestReportCount() (config.SuccessKpi, error) 
 	for rows.Next() {
 		var total float64
 		if err := rows.Scan(&total); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.SuccessKpi{
@@ -556,7 +641,7 @@ func (c *PostgreDb) QueryRequestGetImageCount() (config.SuccessKpi, error) {
 	var data config.SuccessKpi
 	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\n WHERE url LIKE '%vtracking/s3%'")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -564,7 +649,7 @@ func (c *PostgreDb) QueryRequestGetImageCount() (config.SuccessKpi, error) {
 	for rows.Next() {
 		var total float64
 		if err := rows.Scan(&total); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.SuccessKpi{
@@ -580,7 +665,7 @@ func (c *PostgreDb) QuerySuccessRequestGetImageCount() (config.SuccessKpi, error
 	var data config.SuccessKpi
 	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions WHERE response_body NOT LIKE '%\"code\"%' AND url LIKE '%vtracking/s3%'")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -588,7 +673,7 @@ func (c *PostgreDb) QuerySuccessRequestGetImageCount() (config.SuccessKpi, error
 	for rows.Next() {
 		var total float64
 		if err := rows.Scan(&total); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.SuccessKpi{
@@ -618,7 +703,7 @@ func (c *PostgreDb) QueryRequestTrackingCount() (config.SuccessKpi, error) {
 	var data config.SuccessKpi
 	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions\n WHERE url LIKE '%attributes/vtracking/logged/VEHICLE/%'")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -626,7 +711,7 @@ func (c *PostgreDb) QueryRequestTrackingCount() (config.SuccessKpi, error) {
 	for rows.Next() {
 		var total float64
 		if err := rows.Scan(&total); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.SuccessKpi{
@@ -642,7 +727,7 @@ func (c *PostgreDb) QuerySuccessRequestTrackingCount() (config.SuccessKpi, error
 	var data config.SuccessKpi
 	rows, err := c.db.Query("SELECT COUNT(*)\nFROM transactions WHERE response_body NOT LIKE '%\"code\"%' AND url LIKE '%attributes/vtracking/logged/VEHICLE/%'")
 	if err != nil {
-		fmt.Printf("Loi get db", err)
+		fmt.Printf("Loi get db %v", err)
 		return data, err
 	}
 	defer rows.Close()
@@ -650,7 +735,7 @@ func (c *PostgreDb) QuerySuccessRequestTrackingCount() (config.SuccessKpi, error
 	for rows.Next() {
 		var total float64
 		if err := rows.Scan(&total); err != nil {
-			fmt.Printf("Loi scan db ", err)
+			fmt.Printf("Loi scan db  %v", err)
 			return data, err
 		}
 		data = config.SuccessKpi{

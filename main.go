@@ -1,43 +1,65 @@
 package main
 
 import (
+	"Monitor_Platform/config"
+	"Monitor_Platform/model"
 	"Monitor_Platform/routes"
+	"Monitor_Platform/services"
+	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 )
 
 func main() {
-	//var cfg config.DBConfig
-	//cfg = model.LoadDBConfig()
-	//db := model.ConnectToDb()
-	//defer db.Close()
-	//db, _ := model.ConnectNewDB(cfg)
-	//db2, _ := model.ConnectTransDB(cfg)
+	// Kiểm tra cấu hình DB bắt buộc qua biến môi trường
+	if err := config.ValidateDBConfig(model.LoadDBConfig()); err != nil {
+		fmt.Printf("Database config error: %v\n", err)
+		return
+	}
+
+	// Worker ghi log API (POST /ems/kpi/logs)
+	services.StartApiLogWorker()
+	// Worker ghi daily api kpi (POST /ems/kpi/daily)
+	services.StartDailyApiKpiWorker()
+	// Worker tính availability hệ thống mỗi 24h
+	services.StartSystemAvailabilityJob()
+
+	r := routes.SetupRouter()
+	srv := &http.Server{
+		Addr:    ":8933",
+		Handler: r,
+	}
+
+	// Start server
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			panic(err)
+		}
+	}()
+
+	// Demo loop cũ
 	go func() {
 		for {
 			GetCpuUsage()
-			//services.MonitorKpiApi(db)
-			//db.QueryData()
-			//db2.QueryLatency()
 			time.Sleep(60 * time.Second)
 		}
 	}()
-	go func() {
-		for {
-			fmt.Print("08042024\n")
-			time.Sleep(5 * time.Second)
-		}
 
-	}()
-	r := routes.SetupRouter()
+	// Graceful shutdown
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+	<-stop
 
-	err := r.Run(":8933")
-	if err != nil {
-		panic(err)
-	}
-	select {}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 
+	_ = srv.Shutdown(ctx)
 }
+
 func GetCpuUsage() {
-	fmt.Print("Monitor 08042024\n")
+	fmt.Print("Monitor 03022026\n")
 }
