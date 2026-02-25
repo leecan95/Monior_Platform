@@ -63,6 +63,15 @@ type PostgreDb struct {
 type PostgreDB struct {
 	pool *pgxpool.Pool
 }
+
+// Close closes underlying sql.DB
+func (p *PostgreDb) Close() error {
+	if p == nil || p.db == nil {
+		return nil
+	}
+	return p.db.Close()
+}
+
 type CpuUsage struct {
 	ID        int     `db:"id"`
 	CpuID     int     `db:"cpu_id"`
@@ -93,6 +102,15 @@ type ApiLog struct {
 	StatusCode int
 	Latency    int64
 	Timestamp  time.Time
+}
+
+// DailyApiKpi represents aggregated daily KPI metrics per API.
+type DailyApiKpi struct {
+	Url             string
+	TotalUsers      int64
+	CrashUsers      int64
+	NonCrashPercent float64
+	KpiDate         time.Time
 }
 
 // --- shared DB pools ---
@@ -1670,6 +1688,34 @@ func (c *PostgreDb) BatchInsertApiLogs(logs []ApiLog) error {
 		}
 	}
 
+	return tx.Commit()
+}
+
+// BatchInsertDailyApiKpi inserts a slice of DailyApiKpi into the daily_api_kpi table.
+func (c *PostgreDb) BatchInsertDailyApiKpi(rows []DailyApiKpi) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
+
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO daily_api_kpi (url, total_users, crash_users, non_crash_percent, kpi_date) VALUES ($1,$2,$3,$4,$5)`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+
+	for _, row := range rows {
+		if _, err := stmt.ExecContext(ctx, row.Url, row.TotalUsers, row.CrashUsers, row.NonCrashPercent, row.KpiDate); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
 	return tx.Commit()
 }
 

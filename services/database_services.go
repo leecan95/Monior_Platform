@@ -17,6 +17,10 @@ import (
 var (
 	apiLogQueue = make(chan model.ApiLog, 20000)
 	batchSize   = 1000
+	// daily_api_kpi queue
+	dailyApiKpiQueue   = make(chan model.DailyApiKpi, 5000)
+	dailyBatchSize     = 500
+	dailyFlushInterval = 10 * time.Second
 )
 
 func EnqueueApiLog(logItem model.ApiLog) {
@@ -55,6 +59,46 @@ func flushApiLog(logs []model.ApiLog) {
 
 	if err := db.BatchInsertApiLogs(logs); err != nil {
 		log.Printf("[ERROR] batch insert api logs failed: %v", err)
+	}
+}
+
+// EnqueueDailyApiKpi pushes a KPI row into queue; drops if full.
+func EnqueueDailyApiKpi(row model.DailyApiKpi) {
+	select {
+	case dailyApiKpiQueue <- row:
+	default:
+		log.Println("[WARN] daily api kpi queue full, dropping row")
+	}
+}
+
+// StartDailyApiKpiWorker flushes KPI rows in batches to daily_api_kpi table.
+func StartDailyApiKpiWorker() {
+	go func() {
+		buffer := make([]model.DailyApiKpi, 0, dailyBatchSize)
+		ticker := time.NewTicker(dailyFlushInterval)
+		for {
+			select {
+			case item := <-dailyApiKpiQueue:
+				buffer = append(buffer, item)
+				if len(buffer) >= dailyBatchSize {
+					flushDailyApiKpi(buffer)
+					buffer = buffer[:0]
+				}
+			case <-ticker.C:
+				if len(buffer) > 0 {
+					flushDailyApiKpi(buffer)
+					buffer = buffer[:0]
+				}
+			}
+		}
+	}()
+}
+
+func flushDailyApiKpi(rows []model.DailyApiKpi) {
+	db := model.ConnectToTransDb()
+
+	if err := db.BatchInsertDailyApiKpi(rows); err != nil {
+		log.Printf("[ERROR] batch insert daily api kpi failed: %v", err)
 	}
 }
 
