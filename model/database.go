@@ -89,6 +89,7 @@ type ApiLog struct {
 	StatusCode int
 	Latency    int64
 	Timestamp  time.Time
+	Messages   string
 }
 
 // DailyApiKpi represents aggregated daily KPI metrics per API.
@@ -180,7 +181,7 @@ func (c *PostgreDb) BatchInsertApiLogs(logs []ApiLog) error {
 	if err != nil {
 		return err
 	}
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO api_logs (url, status_code, latency, timestamp) VALUES ($1,$2,$3,$4)`)
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO api_logs (url, status_code, latency, timestamp, messages) VALUES ($1,$2,$3,$4,$5)`)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
@@ -188,7 +189,7 @@ func (c *PostgreDb) BatchInsertApiLogs(logs []ApiLog) error {
 	defer stmt.Close()
 
 	for _, l := range logs {
-		if _, err := stmt.ExecContext(ctx, l.Url, l.StatusCode, l.Latency, l.Timestamp); err != nil {
+		if _, err := stmt.ExecContext(ctx, l.Url, l.StatusCode, l.Latency, l.Timestamp, l.Messages); err != nil {
 			_ = tx.Rollback()
 			return err
 		}

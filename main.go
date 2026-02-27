@@ -25,8 +25,12 @@ func main() {
 	services.StartApiLogWorker()
 	// Worker ghi daily api kpi (POST /ems/kpi/daily)
 	services.StartDailyApiKpiWorker()
-	// Worker tính availability hệ thống mỗi 24h
+	// Worker tính availability hệ thống hằng ngày lúc 09:59 UTC
 	services.StartSystemAvailabilityJob()
+	// Worker lấy trạng thái replicas deployment mỗi 10s
+	services.StartDeploymentReplicaStatusJob()
+	// Worker lấy trạng thái ready nginx-ingress mỗi 30s
+	services.StartNginxIngressReadyStatusJob()
 
 	r := routes.SetupRouter()
 	srv := &http.Server{
@@ -61,5 +65,5 @@ func main() {
 }
 
 func GetCpuUsage() {
-	fmt.Print("Monitor 03022026\n")
+	fmt.Print("Monitor 26022026\n")
 }

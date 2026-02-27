@@ -28,17 +28,20 @@ type prometheusInstantResponse struct {
 	ErrorType string `json:"errorType,omitempty"`
 }
 
-// StartSystemAvailabilityJob schedules a 24h job that calculates system availability
+// StartSystemAvailabilityJob runs the availability snapshot daily at 09:59 UTC
 // and writes it into transactions.system_availability.
 func StartSystemAvailabilityJob() {
 	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
+		for {
+			now := time.Now().UTC()
+			nextRun := time.Date(now.Year(), now.Month(), now.Day(), 9, 59, 0, 0, time.UTC)
+			if !now.Before(nextRun) {
+				nextRun = nextRun.Add(24 * time.Hour)
+			}
 
-		// run immediately on start
-		runAvailabilitySnapshot()
+			timer := time.NewTimer(nextRun.Sub(now))
+			<-timer.C
 
-		for range ticker.C {
 			runAvailabilitySnapshot()
 		}
 	}()
@@ -52,7 +55,7 @@ func runAvailabilitySnapshot() {
 		return
 	}
 
-	rangeStr := todayRangeDuration()
+	rangeStr := "24h"
 
 	success, err := queryPrometheusValue(fmt.Sprintf(`sum(increase(nginx_ingress_controller_requests{status=~"(2|4).."}[%s]))`, rangeStr))
 	if err != nil {
@@ -100,15 +103,6 @@ func runAvailabilitySnapshot() {
 	if err := db.InsertSystemAvailability(row); err != nil {
 		log.Printf("[ERROR] availability job: insert row: %v", err)
 	}
-}
-
-// todayRangeDuration returns PromQL duration string from 00:00 UTC today to now (e.g. "14h23m").
-func todayRangeDuration() string {
-	now := time.Now().UTC()
-	start := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	dur := now.Sub(start)
-	// PromQL accepts seconds; keep simple to avoid precision issues with ms.
-	return fmt.Sprintf("%ds", int(dur.Seconds()))
 }
 
 // queryPrometheusValue executes a Prometheus instant query and returns the numeric value.
