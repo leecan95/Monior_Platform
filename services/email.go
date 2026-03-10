@@ -95,7 +95,7 @@ func ContentEmail() config.Mail {
 	subject := fmt.Sprintf("[Mail tự động]Báo cáo VTRACKING - Ngày %s", formattedDate)
 	// Lấy kết quả
 	//Giá trị Latency thực tế
-	//tracking, _ := model.GetTrackingLatencyOneDay()
+	tracking, _ := model.GetTrackingLatencyOneDay()
 	image, _ := model.GetImageLatencyOneDay()
 	login, _ := model.GetLoginLatencyOneDay()
 	dashboard, _ := model.GetDashboardLatencyOneDay()
@@ -115,8 +115,8 @@ func ContentEmail() config.Mail {
 	// Ngưỡng đánh giá >=95%
 	threshold := 95.0
 	// Danh sách các thông số
-	//kpis := []config.LatencyKpi{tracking, image, login, dashboard, total}
-	kpis := []config.LatencyKpi{image, login, dashboard, total}
+	kpis := []config.LatencyKpi{tracking, image, login, dashboard, total}
+	//kpis := []config.LatencyKpi{image, login, dashboard, total}
 
 	// Tạo bảng HTML động cho Latency
 	rows := ""

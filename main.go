@@ -57,6 +57,8 @@ func main() {
 	services.StartApiLogWorker()
 	services.StartDailyApiKpiWorker()
 	services.StartSystemAvailabilityJob()
+	services.StartDeploymentReplicaStatusJob()
+	services.StartNginxIngressReadyStatusJob()
 	r := routes.SetupRouter()
 	srv := &http.Server{
 		Addr:    ":8933",
@@ -83,5 +85,5 @@ func main() {
 }
 
 func GetCpuUsage() {
-	fmt.Print("Monitor 06022026\n")
+	fmt.Print("Monitor 04032026\n")
 }

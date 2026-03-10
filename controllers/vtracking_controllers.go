@@ -15,10 +15,11 @@ import (
 //NEW
 
 type ApiLogRequest struct {
-	Url        string `json:"url" binding:"required"`
-	StatusCode int    `json:"status_code" binding:"required"`
-	Latency    int64  `json:"latency" binding:"required"`
-	Timestamp  int64  `json:"timestamp"`
+	Url        string  `json:"url" binding:"required"`
+	StatusCode int     `json:"status_code" binding:"required"`
+	Latency    int64   `json:"latency" binding:"required"`
+	Timestamp  int64   `json:"timestamp"`
+	Messages   *string `json:"messages"`
 }
 
 // POST /ems/kpi/daily
@@ -42,6 +43,7 @@ func CollectApiLogController(c *gin.Context) {
 		StatusCode: req.StatusCode,
 		Latency:    req.Latency,
 		Timestamp:  time.UnixMilli(req.Timestamp),
+		Messages:   req.Messages,
 	}
 
 	services.EnqueueApiLog(logItem)

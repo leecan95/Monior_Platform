@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 )
 
@@ -2297,12 +2298,22 @@ func GetKpiLatencyVtrack(c *gin.Context) []KpiData {
 
 func GetPrometheus(c *gin.Context, query string) interface{} {
 	var response map[string]interface{}
-	url := config.PrometheusUrl
-	params := "?query=" + query
-	resp, err := http.Get(url + params)
+	baseURL, err := url.Parse(config.PrometheusUrl)
+	if err != nil {
+		log.Printf("error parsing prometheus url: %s", err)
+		c.Error(err)
+		return ""
+	}
+
+	params := baseURL.Query()
+	params.Set("query", query)
+	baseURL.RawQuery = params.Encode()
+
+	resp, err := http.Get(baseURL.String())
 	if err != nil {
 		log.Printf("error in services %s", err)
 		c.Error(err)
+		return ""
 	}
 	defer resp.Body.Close() // Đảm bảo body được đóng sau khi sử dụng.
 
@@ -2313,9 +2324,24 @@ func GetPrometheus(c *gin.Context, query string) interface{} {
 		return ""
 	}
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		msg := string(body)
+		if len(msg) > 300 {
+			msg = msg[:300]
+		}
+		err = fmt.Errorf("prometheus returned status=%d body=%q", resp.StatusCode, msg)
+		log.Printf("error in services %s", err)
+		c.Error(err)
+		return ""
+	}
+
 	err = json.Unmarshal(body, &response)
 	if err != nil {
-		log.Printf("error unmarshaling JSON: %s", err)
+		msg := string(body)
+		if len(msg) > 300 {
+			msg = msg[:300]
+		}
+		log.Printf("error unmarshaling JSON: %s body=%q", err, msg)
 		c.Error(err)
 		return ""
 	}
