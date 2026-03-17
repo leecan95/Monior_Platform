@@ -9,6 +9,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.2.0
 	github.com/prometheus/client_golang v1.16.0
+	go.mongodb.org/mongo-driver v1.17.6
 )
 
 require (

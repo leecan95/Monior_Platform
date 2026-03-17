@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 )
 
 func main() {
@@ -31,6 +32,8 @@ func main() {
 	services.StartDeploymentReplicaStatusJob()
 	// Worker lấy trạng thái ready nginx-ingress mỗi 30s
 	services.StartNginxIngressReadyStatusJob()
+	// Worker query mẫu KPI thiết bị mỗi 5 phút, nhưng ghi vào device_kpi theo chu kỳ 1 giờ
+	services.StartDeviceAccOnKpiJob()
 
 	r := routes.SetupRouter()
 	srv := &http.Server{
@@ -65,5 +68,5 @@ func main() {
 }
 
 func GetCpuUsage() {
-	fmt.Print("Monitor 26022026\n")
+	fmt.Print("Monitor 10032026\n")
 }

@@ -7,7 +7,9 @@ RUN go mod download
 
 COPY . ./
 
-RUN CGO_ENABLED=0 GOOS=linux go build -v -o main ./
+RUN go mod tidy
+RUN go mod vendor
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -v -o main ./
 
 FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
