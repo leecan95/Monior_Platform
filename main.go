@@ -59,6 +59,7 @@ func main() {
 	services.StartSystemAvailabilityJob()
 	services.StartDeploymentReplicaStatusJob()
 	services.StartNginxIngressReadyStatusJob()
+	services.StartDeviceAccOnKpiJob()
 	r := routes.SetupRouter()
 	srv := &http.Server{
 		Addr:    ":8933",
