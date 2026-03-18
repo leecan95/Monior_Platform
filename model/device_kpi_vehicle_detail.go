@@ -254,8 +254,11 @@ base AS (
         p.count_acc_off_over_72h AS prev_count_acc_off_over_72h,
         p.count_vehicle_mkn_over_72h AS prev_count_vehicle_mkn_over_72h,
         p.acc_on_last_update_at AS prev_acc_on_last_update_at,
+        p.acc_on_last_violation_at AS prev_acc_on_last_violation_at,
         p.acc_off_last_update_at AS prev_acc_off_last_update_at,
-        p.mkn_last_update_at AS prev_mkn_last_update_at
+        p.acc_off_last_violation_at AS prev_acc_off_last_violation_at,
+        p.mkn_last_update_at AS prev_mkn_last_update_at,
+        p.mkn_last_violation_at AS prev_mkn_last_violation_at
     FROM src s
     LEFT JOIN LATERAL (
         SELECT
@@ -263,8 +266,11 @@ base AS (
             t.count_acc_off_over_72h,
             t.count_vehicle_mkn_over_72h,
             t.acc_on_last_update_at,
+            t.acc_on_last_violation_at,
             t.acc_off_last_update_at,
-            t.mkn_last_update_at
+            t.acc_off_last_violation_at,
+            t.mkn_last_update_at,
+            t.mkn_last_violation_at
         FROM device_kpi_vehicle_detail_snapshot t
         WHERE t.plate_no = s.plate_no
           AND t.snapshot_date < $1::date
@@ -324,25 +330,40 @@ SELECT
     b.mkn_last_violation_at,
     COALESCE(b.prev_count_acc_on_over_10h, 0) +
         CASE
-            WHEN b.in_acc_on_over_10h
-                 AND b.acc_on_last_update_at IS NOT NULL
-                 AND (b.prev_acc_on_last_update_at IS NULL OR b.acc_on_last_update_at <> b.prev_acc_on_last_update_at)
+            WHEN (
+                    b.in_acc_on_over_10h
+                    AND b.acc_on_last_update_at IS NOT NULL
+                    AND (b.prev_acc_on_last_update_at IS NULL OR b.acc_on_last_update_at <> b.prev_acc_on_last_update_at)
+                 ) OR (
+                    b.acc_on_last_violation_at IS NOT NULL
+                    AND (b.prev_acc_on_last_violation_at IS NULL OR b.acc_on_last_violation_at <> b.prev_acc_on_last_violation_at)
+                 )
                 THEN 1
             ELSE 0
         END,
     COALESCE(b.prev_count_acc_off_over_72h, 0) +
         CASE
-            WHEN b.in_acc_off_over_72h
-                 AND b.acc_off_last_update_at IS NOT NULL
-                 AND (b.prev_acc_off_last_update_at IS NULL OR b.acc_off_last_update_at <> b.prev_acc_off_last_update_at)
+            WHEN (
+                    b.in_acc_off_over_72h
+                    AND b.acc_off_last_update_at IS NOT NULL
+                    AND (b.prev_acc_off_last_update_at IS NULL OR b.acc_off_last_update_at <> b.prev_acc_off_last_update_at)
+                 ) OR (
+                    b.acc_off_last_violation_at IS NOT NULL
+                    AND (b.prev_acc_off_last_violation_at IS NULL OR b.acc_off_last_violation_at <> b.prev_acc_off_last_violation_at)
+                 )
                 THEN 1
             ELSE 0
         END,
     COALESCE(b.prev_count_vehicle_mkn_over_72h, 0) +
         CASE
-            WHEN b.in_vehicle_mkn_over_72h
-                 AND b.mkn_last_update_at IS NOT NULL
-                 AND (b.prev_mkn_last_update_at IS NULL OR b.mkn_last_update_at <> b.prev_mkn_last_update_at)
+            WHEN (
+                    b.in_vehicle_mkn_over_72h
+                    AND b.mkn_last_update_at IS NOT NULL
+                    AND (b.prev_mkn_last_update_at IS NULL OR b.mkn_last_update_at <> b.prev_mkn_last_update_at)
+                 ) OR (
+                    b.mkn_last_violation_at IS NOT NULL
+                    AND (b.prev_mkn_last_violation_at IS NULL OR b.mkn_last_violation_at <> b.prev_mkn_last_violation_at)
+                 )
                 THEN 1
             ELSE 0
         END,
