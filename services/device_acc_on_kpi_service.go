@@ -23,6 +23,7 @@ const (
 	deviceKpiVehicleMknName = "VEHICLE_MKN_OVER_72H"
 	deviceKpiVehicleMknNow  = "VEHICLE_MKN_CURRENT"
 	deviceKpiVehicleBadGps  = "VEHICLE_BADGPS_OVER_ONLINE_IN_DAY"
+	deviceKpiBadWriteMemory = "BAD_WRITE_MEMORY"
 	deviceKpiAccOnCycle21   = "ACC_ON_OVER_10H_CYCLE_21"
 	deviceKpiAccOffCycle21  = "ACC_OFF_OVER_72H_CYCLE_21"
 	deviceKpiMknCycle21     = "VEHICLE_MKN_OVER_72H_CYCLE_21"
@@ -109,13 +110,13 @@ func runDeviceAccOnKpiSnapshot() {
 	}
 	log.Printf("[INFO] device acc job: ensured table device_kpi")
 
-	matchedMknCurrent, matchedBadGps, totalOnlineInDay, err := syncDailyVehicleStatusAndGetCounts(db)
+	matchedMknCurrent, matchedBadGps, matchedBadMemory, totalOnlineInDay, err := syncDailyVehicleStatusAndGetCounts(db)
 	if err != nil {
 		log.Printf("[ERROR] device acc job: sync daily status for VEHICLE_MKN_CURRENT and VEHICLE_BADGPS_OVER_ONLINE_IN_DAY: %v", err)
 		return
 	}
-	log.Printf("[INFO] device acc job: daily counters mkn_current=%d badgps_in_day=%d online_in_day=%d",
-		matchedMknCurrent, matchedBadGps, totalOnlineInDay)
+	log.Printf("[INFO] device acc job: daily counters mkn_current=%d badgps_in_day=%d badmem_in_day=%d online_in_day=%d",
+		matchedMknCurrent, matchedBadGps, matchedBadMemory, totalOnlineInDay)
 
 	cycleAccOnMatched, cycleAccOffMatched, cycleMknMatched, cycleTotalVehicles, cycleStartTs, cycleErr := countDistinctVehicleKpiInCycle21Window()
 	if cycleErr != nil {
@@ -123,17 +124,6 @@ func runDeviceAccOnKpiSnapshot() {
 	}
 
 	timestamp := time.Now().UTC()
-	canInsertDeviceKpi, insertWait, err := shouldInsertDeviceKpiSnapshot(db, timestamp)
-	if err != nil {
-		log.Printf("[ERROR] device acc job: decide hourly insert for device_kpi: %v", err)
-		return
-	}
-	if !canInsertDeviceKpi {
-		log.Printf("[INFO] device acc job: sampled mongo, skip device_kpi insert (next write after %s)", insertWait.UTC().Format(time.RFC3339))
-		return
-	}
-	log.Printf("[INFO] device acc job: hourly gate passed, proceed writing snapshots")
-
 	if err := db.EnsureDeviceKPIVehicleDetailTable(); err != nil {
 		log.Printf("[ERROR] device acc job: ensure device_kpi_vehicle_detail table: %v", err)
 		return
@@ -146,6 +136,17 @@ func runDeviceAccOnKpiSnapshot() {
 		log.Printf("[ERROR] device acc job: reset daily flags in device_kpi_vehicle_detail: %v", err)
 		return
 	}
+
+	canInsertDeviceKpi, insertWait, err := shouldInsertDeviceKpiSnapshot(db, timestamp)
+	if err != nil {
+		log.Printf("[ERROR] device acc job: decide hourly insert for device_kpi: %v", err)
+		return
+	}
+	if !canInsertDeviceKpi {
+		log.Printf("[INFO] device acc job: sampled mongo, skip device_kpi insert (next write after %s)", insertWait.UTC().Format(time.RFC3339))
+		return
+	}
+	log.Printf("[INFO] device acc job: hourly gate passed, proceed writing snapshots")
 	detailRows, err := fetchVehicleKpiDetailSnapshot(timestamp)
 	if err != nil {
 		log.Printf("[ERROR] device acc job: fetch hourly vehicle detail snapshot from mongo: %v", err)
@@ -212,6 +213,17 @@ func runDeviceAccOnKpiSnapshot() {
 	}
 	if err := db.InsertDeviceKPI(badGpsRow); err != nil {
 		log.Printf("[ERROR] device acc job: insert VEHICLE_BADGPS_OVER_ONLINE_IN_DAY row: %v", err)
+		insertFailed = true
+	}
+
+	badWriteMemoryRow := model.DeviceKPI{
+		Name:               deviceKpiBadWriteMemory,
+		MatchedDeviceCount: matchedBadMemory,
+		TotalDeviceCount:   totalOnlineInDay,
+		Timestamp:          timestamp,
+	}
+	if err := db.InsertDeviceKPI(badWriteMemoryRow); err != nil {
+		log.Printf("[ERROR] device acc job: insert BAD_WRITE_MEMORY row: %v", err)
 		insertFailed = true
 	}
 
@@ -320,15 +332,15 @@ func countVehicleByFieldCondition(fieldPrefix, fieldValue string, overDuration t
 	return matchedCount, totalCount, nil
 }
 
-func syncDailyVehicleStatusAndGetCounts(db *model.PostgreDb) (int64, int64, int64, error) {
+func syncDailyVehicleStatusAndGetCounts(db *model.PostgreDb) (int64, int64, int64, int64, error) {
 	if err := db.EnsureDeviceKPIDailyStatusTable(); err != nil {
-		return 0, 0, 0, fmt.Errorf("ensure device_kpi_daily_vehicle_status table: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("ensure device_kpi_daily_vehicle_status table: %w", err)
 	}
 	if err := db.EnsureDeviceKPIDailyStatusArchiveTable(); err != nil {
-		return 0, 0, 0, fmt.Errorf("ensure device_kpi_daily_vehicle_status_archive table: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("ensure device_kpi_daily_vehicle_status_archive table: %w", err)
 	}
 	if err := db.EnsureDeviceKPIJobCursorTable(); err != nil {
-		return 0, 0, 0, fmt.Errorf("ensure device_kpi_job_cursor table: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("ensure device_kpi_job_cursor table: %w", err)
 	}
 
 	loc := resolveKpiLocation()
@@ -338,12 +350,12 @@ func syncDailyVehicleStatusAndGetCounts(db *model.PostgreDb) (int64, int64, int6
 	dayStartTs := startOfDayMillis(nowLocal)
 
 	if err := resetDeviceKPIDailyStatusFlagsOnNewDay(db, nowLocal); err != nil {
-		return 0, 0, 0, fmt.Errorf("reset daily status seen flags on new day: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("reset daily status seen flags on new day: %w", err)
 	}
 
 	cursor, err := db.GetDeviceKPIJobCursor(deviceDailyStatusCursor)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("get cursor for device daily status job: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("get cursor for device daily status job: %w", err)
 	}
 
 	lookbackMillis := resolveKpiIncrementalLookbackMillis()
@@ -361,35 +373,38 @@ func syncDailyVehicleStatusAndGetCounts(db *model.PostgreDb) (int64, int64, int6
 	log.Printf("[INFO] device acc job: daily window kpi_date=%s start_ts=%d end_ts=%d lookback_ms=%d cursor_valid=%t cursor_ts=%d",
 		kpiDate, windowStartTs, runEndTs, lookbackMillis, cursor.Valid, cursor.Int64)
 
-	offlinePlates, badGpsPlates, onlinePlates, err := fetchDailyVehicleStatusPlateNoSnapshot(windowStartTs, runEndTs, inclusiveStart)
+	offlineVehicles, badGpsVehicles, badMemVehicles, onlineVehicles, err := fetchDailyVehicleStatusPlateNoSnapshot(windowStartTs, runEndTs, dayStartTs, inclusiveStart)
 	if err != nil {
-		return 0, 0, 0, err
+		return 0, 0, 0, 0, err
 	}
 
-	if err := db.UpsertDeviceKPIDailyStatusFlags(kpiDate, offlinePlates, "offline"); err != nil {
-		return 0, 0, 0, fmt.Errorf("upsert offline plates: %w", err)
+	if err := db.UpsertDeviceKPIDailyStatusFlags(kpiDate, offlineVehicles, "offline"); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("upsert offline plates: %w", err)
 	}
-	if err := db.UpsertDeviceKPIDailyStatusFlags(kpiDate, badGpsPlates, "badgps"); err != nil {
-		return 0, 0, 0, fmt.Errorf("upsert badgps plates: %w", err)
+	if err := db.UpsertDeviceKPIDailyStatusFlags(kpiDate, badGpsVehicles, "badgps"); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("upsert badgps plates: %w", err)
 	}
-	if err := db.UpsertDeviceKPIDailyStatusFlags(kpiDate, onlinePlates, "online"); err != nil {
-		return 0, 0, 0, fmt.Errorf("upsert online plates: %w", err)
+	if err := db.UpsertDeviceKPIDailyStatusFlags(kpiDate, badMemVehicles, "bad_memory"); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("upsert bad memory plates: %w", err)
+	}
+	if err := db.UpsertDeviceKPIDailyStatusFlags(kpiDate, onlineVehicles, "online"); err != nil {
+		return 0, 0, 0, 0, fmt.Errorf("upsert online plates: %w", err)
 	}
 
-	offlineCount, badGpsCount, onlineCount, err := db.CountDeviceKPIDailyStatusFlags(kpiDate)
+	offlineCount, badGpsCount, badMemCount, onlineCount, err := db.CountDeviceKPIDailyStatusFlags(kpiDate)
 	if err != nil {
-		return 0, 0, 0, fmt.Errorf("count daily status flags: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("count daily status flags: %w", err)
 	}
 
 	if err := db.UpsertDeviceKPIJobCursor(deviceDailyStatusCursor, runEndTs); err != nil {
-		return 0, 0, 0, fmt.Errorf("upsert cursor for device daily status job: %w", err)
+		return 0, 0, 0, 0, fmt.Errorf("upsert cursor for device daily status job: %w", err)
 	}
 	log.Printf("[INFO] device acc job: daily status cursor advanced to=%d", runEndTs)
 
-	return offlineCount, badGpsCount, onlineCount, nil
+	return offlineCount, badGpsCount, badMemCount, onlineCount, nil
 }
 
-func fetchDailyVehicleStatusPlateNoSnapshot(startTs, endTs int64, inclusiveStart bool) ([]string, []string, []string, error) {
+func fetchDailyVehicleStatusPlateNoSnapshot(startTs, endTs, dayStartTs int64, inclusiveStart bool) ([]model.DeviceKPIDailyStatusVehicle, []model.DeviceKPIDailyStatusVehicle, []model.DeviceKPIDailyStatusVehicle, []model.DeviceKPIDailyStatusVehicle, error) {
 	mongoDBName := config.Env(config.EnvAttrMongoDBName, config.DefAttrMongoDBName)
 	mongoHosts := config.Env(config.EnvAttrMongoHosts, config.DefAttrMongoHosts)
 	mongoPort := config.Env(config.EnvAttrMongoPort, config.DefAttrMongoPort)
@@ -400,7 +415,7 @@ func fetchDailyVehicleStatusPlateNoSnapshot(startTs, endTs int64, inclusiveStart
 
 	clientURI, err := buildMongoURI(mongoHosts, mongoPort)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	authSources := buildAuthSourceCandidates(mongoDBName, mongoAuthSourceCfg)
@@ -408,7 +423,7 @@ func fetchDailyVehicleStatusPlateNoSnapshot(startTs, endTs int64, inclusiveStart
 
 	client, usedAuthSource, usedAuthMech, err := connectMongoWithFallback(clientURI, mongoUser, mongoPass, authSources, authMechs)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("connect mongo with fallback auth: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("connect mongo with fallback auth: %w", err)
 	}
 	defer func() {
 		disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -441,22 +456,32 @@ func fetchDailyVehicleStatusPlateNoSnapshot(startTs, endTs int64, inclusiveStart
 		"status.last_update_ts": timeRange,
 		"plateNo.value":         bson.M{"$exists": true, "$ne": ""},
 	}
+	badMemoryFilter := bson.M{
+		"entity_type":                          "VEHICLE",
+		"plateNo.value":                        bson.M{"$exists": true, "$ne": ""},
+		"memoryCardStatus.last_update_ts":      timeRange,
+		"memoryCardStatus.value.nok_latest_ts": bson.M{"$gte": dayStartTs, "$lte": endTs},
+	}
 
-	offlinePlates, err := distinctPlateNos(ctx, coll, offlineFilter)
+	offlineVehicles, err := distinctVehicleIdentities(ctx, coll, offlineFilter, "status.last_update_ts")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("distinct offline plateNo in day: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("distinct offline plateNo in day: %w", err)
 	}
-	badGpsPlates, err := distinctPlateNos(ctx, coll, badGpsFilter)
+	badGpsVehicles, err := distinctVehicleIdentities(ctx, coll, badGpsFilter, "status.last_update_ts")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("distinct badgps plateNo in day: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("distinct badgps plateNo in day: %w", err)
 	}
-	onlinePlates, err := distinctPlateNos(ctx, coll, onlineFilter)
+	badMemVehicles, err := distinctVehicleIdentities(ctx, coll, badMemoryFilter, "memoryCardStatus.last_update_ts")
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("distinct online plateNo in day: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("distinct bad memory plateNo in day: %w", err)
 	}
-	log.Printf("[INFO] device acc job: daily distinct plate counts offline=%d badgps=%d online=%d", len(offlinePlates), len(badGpsPlates), len(onlinePlates))
+	onlineVehicles, err := distinctVehicleIdentities(ctx, coll, onlineFilter, "status.last_update_ts")
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("distinct online plateNo in day: %w", err)
+	}
+	log.Printf("[INFO] device acc job: daily distinct vehicle counts offline=%d badgps=%d bad_memory=%d online=%d", len(offlineVehicles), len(badGpsVehicles), len(badMemVehicles), len(onlineVehicles))
 
-	return offlinePlates, badGpsPlates, onlinePlates, nil
+	return offlineVehicles, badGpsVehicles, badMemVehicles, onlineVehicles, nil
 }
 
 func countDistinctVehicleKpiInCycle21Window() (int64, int64, int64, int64, int64, error) {
@@ -541,6 +566,12 @@ type mongoVehicleDetailRow struct {
 	PlateNo      string `bson:"plate_no"`
 	IMEI         string `bson:"imei"`
 	LastUpdateTS int64  `bson:"last_update_ts"`
+}
+
+type mongoVehicleIdentityRow struct {
+	PlateNo string `bson:"plate_no"`
+	IMEI    string `bson:"imei"`
+	LastTS  int64  `bson:"last_ts"`
 }
 
 func fetchVehicleKpiDetailSnapshot(sampledAtUTC time.Time) ([]model.DeviceKPIVehicleDetail, error) {
@@ -662,6 +693,10 @@ func resetDeviceKPIDailyStatusFlagsOnNewDay(db *model.PostgreDb, nowLocal time.T
 	if err := db.SnapshotDeviceKPIDailyStatus(previousKpiDate, nowLocal.UTC()); err != nil {
 		return fmt.Errorf("snapshot daily status for kpi_date=%s: %w", previousKpiDate, err)
 	}
+	deletedRows, err := db.DeleteDeviceKPIDailyStatusByDate(previousKpiDate)
+	if err != nil {
+		return fmt.Errorf("delete runtime daily status rows for kpi_date=%s: %w", previousKpiDate, err)
+	}
 	if err := db.ResetDeviceKPIDailyStatusFlags(kpiDate); err != nil {
 		return fmt.Errorf("reset seen flags for kpi_date=%s: %w", kpiDate, err)
 	}
@@ -670,7 +705,7 @@ func resetDeviceKPIDailyStatusFlagsOnNewDay(db *model.PostgreDb, nowLocal time.T
 	}
 	log.Printf("[INFO] device acc job: updated cursor %s=%d", deviceDailyStatusReset, dayStartUTC.UnixMilli())
 
-	log.Printf("[INFO] device acc job: snapshot device_kpi_daily_vehicle_status kpi_date=%s and reset flags for new day=%s", previousKpiDate, kpiDate)
+	log.Printf("[INFO] device acc job: snapshot+cleanup device_kpi_daily_vehicle_status kpi_date=%s deleted_rows=%d and reset flags for new day=%s", previousKpiDate, deletedRows, kpiDate)
 	return nil
 }
 
@@ -789,6 +824,60 @@ func countDistinctPlateNos(ctx context.Context, coll *mongo.Collection, filter b
 	}
 
 	return int64(len(plateNos)), nil
+}
+
+func distinctVehicleIdentities(ctx context.Context, coll *mongo.Collection, filter bson.M, tsField string) ([]model.DeviceKPIDailyStatusVehicle, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: filter}},
+		{{Key: "$project", Value: bson.M{
+			"_id":      0,
+			"plate_no": "$plateNo.value",
+			"imei":     bson.M{"$ifNull": []interface{}{"$imei.value", ""}},
+			"last_ts":  fmt.Sprintf("$%s", tsField),
+		}}},
+		{{Key: "$sort", Value: bson.D{
+			{Key: "plate_no", Value: 1},
+			{Key: "last_ts", Value: -1},
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":     "$plate_no",
+			"imei":    bson.M{"$first": "$imei"},
+			"last_ts": bson.M{"$first": "$last_ts"},
+		}}},
+		{{Key: "$project", Value: bson.M{
+			"_id":      0,
+			"plate_no": "$_id",
+			"imei":     1,
+			"last_ts":  1,
+		}}},
+	}
+
+	cursor, err := coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	vehicles := make([]model.DeviceKPIDailyStatusVehicle, 0)
+	for cursor.Next(ctx) {
+		var row mongoVehicleIdentityRow
+		if err := cursor.Decode(&row); err != nil {
+			return nil, err
+		}
+		plate := strings.TrimSpace(row.PlateNo)
+		if plate == "" {
+			continue
+		}
+		vehicles = append(vehicles, model.DeviceKPIDailyStatusVehicle{
+			PlateNo: plate,
+			IMEI:    strings.TrimSpace(row.IMEI),
+		})
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+
+	return vehicles, nil
 }
 
 func startOfDayMillis(nowLocal time.Time) int64 {
