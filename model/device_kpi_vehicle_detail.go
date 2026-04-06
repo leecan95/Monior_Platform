@@ -21,6 +21,14 @@ type DeviceKPIVehicleDetail struct {
 	SampledHour  time.Time
 }
 
+type DeviceVehicleACCState struct {
+	PlateNo      string
+	IMEI         string
+	ACCValue     string
+	LastUpdateTS int64
+	LastUpdateAt time.Time
+}
+
 const (
 	deviceKPIVehicleDetailKPIAccOn  = "ACC_ON_OVER_10H"
 	deviceKPIVehicleDetailKPIAccOff = "ACC_OFF_OVER_72H"
@@ -54,6 +62,9 @@ CREATE TABLE IF NOT EXISTS device_kpi_vehicle_detail (
     mkn_last_update_ts BIGINT NULL,
     mkn_last_update_at TIMESTAMPTZ NULL,
     mkn_last_violation_at TIMESTAMPTZ NULL,
+    acc_state_value TEXT NOT NULL DEFAULT '',
+    acc_state_since_ts BIGINT NULL,
+    acc_state_since_at TIMESTAMPTZ NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -87,6 +98,12 @@ ALTER TABLE device_kpi_vehicle_detail
     ADD COLUMN IF NOT EXISTS mkn_last_update_at TIMESTAMPTZ NULL;
 ALTER TABLE device_kpi_vehicle_detail
     ADD COLUMN IF NOT EXISTS mkn_last_violation_at TIMESTAMPTZ NULL;
+ALTER TABLE device_kpi_vehicle_detail
+    ADD COLUMN IF NOT EXISTS acc_state_value TEXT NOT NULL DEFAULT '';
+ALTER TABLE device_kpi_vehicle_detail
+    ADD COLUMN IF NOT EXISTS acc_state_since_ts BIGINT NULL;
+ALTER TABLE device_kpi_vehicle_detail
+    ADD COLUMN IF NOT EXISTS acc_state_since_at TIMESTAMPTZ NULL;
 ALTER TABLE device_kpi_vehicle_detail
     ADD COLUMN IF NOT EXISTS sampled_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE device_kpi_vehicle_detail
@@ -138,6 +155,274 @@ WHERE d.ctid = r.ctid
 
 	_, err = c.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS uq_device_kpi_vehicle_detail_plate_no ON device_kpi_vehicle_detail (plate_no)`)
 	return err
+}
+
+type deviceACCStatePayload struct {
+	plateNos  []string
+	imeis     []string
+	accValues []string
+	ts        []int64
+	at        []time.Time
+}
+
+func buildDeviceACCStatePayload(rows []DeviceVehicleACCState) deviceACCStatePayload {
+	p := deviceACCStatePayload{
+		plateNos:  make([]string, 0, len(rows)),
+		imeis:     make([]string, 0, len(rows)),
+		accValues: make([]string, 0, len(rows)),
+		ts:        make([]int64, 0, len(rows)),
+		at:        make([]time.Time, 0, len(rows)),
+	}
+	seen := make(map[string]int, len(rows))
+
+	for _, row := range rows {
+		plate := strings.TrimSpace(row.PlateNo)
+		if plate == "" {
+			continue
+		}
+		imei := strings.TrimSpace(row.IMEI)
+		accValue := strings.ToLower(strings.TrimSpace(row.ACCValue))
+		if accValue != "active" && accValue != "inactive" {
+			accValue = ""
+		}
+		ts := row.LastUpdateTS
+		at := row.LastUpdateAt.UTC()
+		if ts <= 0 {
+			ts = at.UnixMilli()
+		}
+		if idx, ok := seen[plate]; ok {
+			if ts > p.ts[idx] {
+				p.imeis[idx] = imei
+				p.accValues[idx] = accValue
+				p.ts[idx] = ts
+				p.at[idx] = at
+			}
+			continue
+		}
+		seen[plate] = len(p.plateNos)
+		p.plateNos = append(p.plateNos, plate)
+		p.imeis = append(p.imeis, imei)
+		p.accValues = append(p.accValues, accValue)
+		p.ts = append(p.ts, ts)
+		p.at = append(p.at, at)
+	}
+
+	return p
+}
+
+// SyncDeviceVehicleACCState persists ACC state continuity and refreshes ACC_ON/ACC_OFF flags from state-since timestamps.
+func (c *PostgreDb) SyncDeviceVehicleACCState(rows []DeviceVehicleACCState, sampledAtUTC, sampledHourUTC time.Time) error {
+	sampledAtUTC = sampledAtUTC.UTC()
+	sampledHourUTC = sampledHourUTC.UTC()
+
+	p := buildDeviceACCStatePayload(rows)
+	if len(p.plateNos) == 0 {
+		return nil
+	}
+
+	accOnThresholdTs := sampledAtUTC.Add(-10 * time.Hour).UnixMilli()
+	accOffThresholdTs := sampledAtUTC.Add(-72 * time.Hour).UnixMilli()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	tx, err := c.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	upsertStateQuery := `
+INSERT INTO device_kpi_vehicle_detail
+    (plate_no, imei, sampled_at, sampled_hour, acc_state_value, acc_state_since_ts, acc_state_since_at, created_at, updated_at)
+SELECT
+    u.plate_no,
+    u.imei,
+    $1,
+    $2,
+    u.acc_value,
+    u.acc_last_update_ts,
+    u.acc_last_update_at,
+    CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+FROM unnest($3::text[], $4::text[], $5::text[], $6::bigint[], $7::timestamptz[]) AS u(plate_no, imei, acc_value, acc_last_update_ts, acc_last_update_at)
+ON CONFLICT (plate_no) DO UPDATE
+SET imei = CASE
+        WHEN EXCLUDED.imei <> '' THEN EXCLUDED.imei
+        ELSE device_kpi_vehicle_detail.imei
+    END,
+    sampled_at = EXCLUDED.sampled_at,
+    sampled_hour = EXCLUDED.sampled_hour,
+    acc_state_value = EXCLUDED.acc_state_value,
+    acc_state_since_ts = CASE
+        WHEN device_kpi_vehicle_detail.acc_state_value IS DISTINCT FROM EXCLUDED.acc_state_value
+            THEN EXCLUDED.acc_state_since_ts
+        WHEN device_kpi_vehicle_detail.acc_state_since_ts IS NULL
+            THEN EXCLUDED.acc_state_since_ts
+        ELSE device_kpi_vehicle_detail.acc_state_since_ts
+    END,
+    acc_state_since_at = CASE
+        WHEN device_kpi_vehicle_detail.acc_state_value IS DISTINCT FROM EXCLUDED.acc_state_value
+            THEN EXCLUDED.acc_state_since_at
+        WHEN device_kpi_vehicle_detail.acc_state_since_at IS NULL
+            THEN EXCLUDED.acc_state_since_at
+        ELSE device_kpi_vehicle_detail.acc_state_since_at
+    END,
+    updated_at = CURRENT_TIMESTAMP`
+
+	if _, err := tx.ExecContext(
+		ctx,
+		upsertStateQuery,
+		sampledAtUTC,
+		sampledHourUTC,
+		pq.Array(p.plateNos),
+		pq.Array(p.imeis),
+		pq.Array(p.accValues),
+		pq.Array(p.ts),
+		pq.Array(p.at),
+	); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	refreshFlagsQuery := `
+UPDATE device_kpi_vehicle_detail
+SET
+    sampled_at = $1,
+    sampled_hour = $2,
+    in_acc_on_over_10h = (
+        acc_state_value = 'active'
+        AND acc_state_since_ts IS NOT NULL
+        AND acc_state_since_ts <= $3
+    ),
+    acc_on_last_update_ts = CASE
+        WHEN acc_state_value = 'active' THEN acc_state_since_ts
+        ELSE NULL
+    END,
+    acc_on_last_update_at = CASE
+        WHEN acc_state_value = 'active' THEN acc_state_since_at
+        ELSE NULL
+    END,
+    acc_on_last_violation_at = CASE
+        WHEN (
+            acc_state_value = 'active'
+            AND acc_state_since_ts IS NOT NULL
+            AND acc_state_since_ts <= $3
+            AND NOT in_acc_on_over_10h
+        ) THEN $1
+        ELSE acc_on_last_violation_at
+    END,
+    in_acc_off_over_72h = (
+        acc_state_value = 'inactive'
+        AND acc_state_since_ts IS NOT NULL
+        AND acc_state_since_ts <= $4
+    ),
+    acc_off_last_update_ts = CASE
+        WHEN acc_state_value = 'inactive' THEN acc_state_since_ts
+        ELSE NULL
+    END,
+    acc_off_last_update_at = CASE
+        WHEN acc_state_value = 'inactive' THEN acc_state_since_at
+        ELSE NULL
+    END,
+    acc_off_last_violation_at = CASE
+        WHEN (
+            acc_state_value = 'inactive'
+            AND acc_state_since_ts IS NOT NULL
+            AND acc_state_since_ts <= $4
+            AND NOT in_acc_off_over_72h
+        ) THEN $1
+        ELSE acc_off_last_violation_at
+    END,
+    updated_at = CURRENT_TIMESTAMP
+WHERE sampled_at = $1
+  AND sampled_hour = $2`
+
+	if _, err := tx.ExecContext(ctx, refreshFlagsQuery, sampledAtUTC, sampledHourUTC, accOnThresholdTs, accOffThresholdTs); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (c *PostgreDb) CountDeviceVehicleACCViolations(sampledHourUTC time.Time) (int64, int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
+
+	query := `
+SELECT
+    COALESCE(SUM(CASE WHEN in_acc_on_over_10h THEN 1 ELSE 0 END), 0),
+    COALESCE(SUM(CASE WHEN in_acc_off_over_72h THEN 1 ELSE 0 END), 0)
+FROM device_kpi_vehicle_detail
+WHERE sampled_hour = $1`
+
+	var accOnCount, accOffCount int64
+	if err := c.db.QueryRowContext(ctx, query, sampledHourUTC.UTC()).Scan(&accOnCount, &accOffCount); err != nil {
+		return 0, 0, err
+	}
+	return accOnCount, accOffCount, nil
+}
+
+func (c *PostgreDb) ListDeviceVehicleACCOnViolationRows(sampledHourUTC time.Time) ([]DeviceKPIVehicleDetail, error) {
+	return c.listDeviceVehicleAccRows(sampledHourUTC.UTC(), true)
+}
+
+func (c *PostgreDb) ListDeviceVehicleACCOffViolationRows(sampledHourUTC time.Time) ([]DeviceKPIVehicleDetail, error) {
+	return c.listDeviceVehicleAccRows(sampledHourUTC.UTC(), false)
+}
+
+func (c *PostgreDb) listDeviceVehicleAccRows(sampledHourUTC time.Time, isAccOn bool) ([]DeviceKPIVehicleDetail, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+	defer cancel()
+
+	var query, kpiName string
+	if isAccOn {
+		kpiName = deviceKPIVehicleDetailKPIAccOn
+		query = `
+SELECT plate_no, imei, acc_on_last_update_ts, acc_on_last_update_at
+FROM device_kpi_vehicle_detail
+WHERE sampled_hour = $1
+  AND in_acc_on_over_10h = TRUE`
+	} else {
+		kpiName = deviceKPIVehicleDetailKPIAccOff
+		query = `
+SELECT plate_no, imei, acc_off_last_update_ts, acc_off_last_update_at
+FROM device_kpi_vehicle_detail
+WHERE sampled_hour = $1
+  AND in_acc_off_over_72h = TRUE`
+	}
+
+	rows, err := c.db.QueryContext(ctx, query, sampledHourUTC)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]DeviceKPIVehicleDetail, 0)
+	for rows.Next() {
+		var plateNo, imei string
+		var ts sql.NullInt64
+		var at sql.NullTime
+		if err := rows.Scan(&plateNo, &imei, &ts, &at); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(plateNo) == "" || !ts.Valid || !at.Valid {
+			continue
+		}
+		out = append(out, DeviceKPIVehicleDetail{
+			KPIName:      kpiName,
+			PlateNo:      strings.TrimSpace(plateNo),
+			IMEI:         strings.TrimSpace(imei),
+			LastUpdateTS: ts.Int64,
+			LastUpdateAt: at.Time.UTC(),
+			SampledHour:  sampledHourUTC,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return out, nil
 }
 
 func (c *PostgreDb) hasPlateUniqueIndex(ctx context.Context) (bool, error) {
