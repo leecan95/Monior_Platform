@@ -86,5 +86,5 @@ func main() {
 }
 
 func GetCpuUsage() {
-	fmt.Print("Monitor 04032026\n")
+	fmt.Print("Monitor 07042026\n")
 }

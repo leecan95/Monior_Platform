@@ -80,23 +80,14 @@ func runDeviceAccOnKpiSnapshot() {
 	cfg := model.LoadDBConfig()
 	log.Printf("[INFO] device acc job: loaded DB config host=%s port=%s user=%s db=%s", cfg.Host, cfg.Port, cfg.User, cfg.Name)
 
-	matchedAccOn, totalAccOn, err := countVehicleByFieldCondition("acc", "active", 10*time.Hour)
-	if err != nil {
-		log.Printf("[ERROR] device acc job: count ACC_ON_OVER_10H from mongo: %v", err)
-		return
-	}
-	matchedAccOff, totalAccOff, err := countVehicleByFieldCondition("acc", "inactive", 72*time.Hour)
-	if err != nil {
-		log.Printf("[ERROR] device acc job: count ACC_OFF_OVER_72H from mongo: %v", err)
-		return
-	}
+	timestamp := time.Now().UTC()
+	sampledHourUTC := sampledHourFromUTC(timestamp, resolveKpiLocation())
+
 	matchedMkn, totalMkn, err := countVehicleByFieldCondition("status", "offline", 72*time.Hour)
 	if err != nil {
 		log.Printf("[ERROR] device acc job: count VEHICLE_MKN_OVER_72H from mongo: %v", err)
 		return
 	}
-	log.Printf("[INFO] device acc job: mongo counters acc_on=%d/%d acc_off=%d/%d mkn_72h=%d/%d",
-		matchedAccOn, totalAccOn, matchedAccOff, totalAccOff, matchedMkn, totalMkn)
 
 	db, err := model.ConnectTransDB(cfg)
 	if err != nil {
@@ -109,6 +100,36 @@ func runDeviceAccOnKpiSnapshot() {
 		return
 	}
 	log.Printf("[INFO] device acc job: ensured table device_kpi")
+	if err := db.EnsureDeviceKPIVehicleDetailTable(); err != nil {
+		log.Printf("[ERROR] device acc job: ensure device_kpi_vehicle_detail table: %v", err)
+		return
+	}
+	if err := db.EnsureDeviceKPIVehicleDetailSnapshotTable(); err != nil {
+		log.Printf("[ERROR] device acc job: ensure device_kpi_vehicle_detail_snapshot table: %v", err)
+		return
+	}
+	// Run day-boundary snapshot/reset independently from hourly KPI insert gate.
+	if err := resetDeviceKPIVehicleDetailFlagsOnNewDay(db, timestamp); err != nil {
+		log.Printf("[ERROR] device acc job: reset daily flags in device_kpi_vehicle_detail: %v", err)
+		return
+	}
+
+	accStateRows, err := fetchVehicleACCStateSnapshot(timestamp)
+	if err != nil {
+		log.Printf("[ERROR] device acc job: fetch ACC state snapshot from mongo: %v", err)
+		return
+	}
+	if err := db.SyncDeviceVehicleACCState(accStateRows, timestamp, sampledHourUTC); err != nil {
+		log.Printf("[ERROR] device acc job: sync ACC state continuity: %v", err)
+		return
+	}
+	matchedAccOn, matchedAccOff, err := db.CountDeviceVehicleACCViolations(sampledHourUTC)
+	if err != nil {
+		log.Printf("[ERROR] device acc job: count ACC_ON/ACC_OFF from postgres state: %v", err)
+		return
+	}
+	totalAccOn := totalMkn
+	totalAccOff := totalMkn
 
 	matchedMknCurrent, matchedBadGps, matchedBadMemory, totalOnlineInDay, err := syncDailyVehicleStatusAndGetCounts(db)
 	if err != nil {
@@ -123,20 +144,6 @@ func runDeviceAccOnKpiSnapshot() {
 		log.Printf("[ERROR] device acc job: count cycle-21 KPI from mongo: %v", cycleErr)
 	}
 
-	timestamp := time.Now().UTC()
-	if err := db.EnsureDeviceKPIVehicleDetailTable(); err != nil {
-		log.Printf("[ERROR] device acc job: ensure device_kpi_vehicle_detail table: %v", err)
-		return
-	}
-	if err := db.EnsureDeviceKPIVehicleDetailSnapshotTable(); err != nil {
-		log.Printf("[ERROR] device acc job: ensure device_kpi_vehicle_detail_snapshot table: %v", err)
-		return
-	}
-	if err := resetDeviceKPIVehicleDetailFlagsOnNewDay(db, timestamp); err != nil {
-		log.Printf("[ERROR] device acc job: reset daily flags in device_kpi_vehicle_detail: %v", err)
-		return
-	}
-
 	canInsertDeviceKpi, insertWait, err := shouldInsertDeviceKpiSnapshot(db, timestamp)
 	if err != nil {
 		log.Printf("[ERROR] device acc job: decide hourly insert for device_kpi: %v", err)
@@ -147,12 +154,29 @@ func runDeviceAccOnKpiSnapshot() {
 		return
 	}
 	log.Printf("[INFO] device acc job: hourly gate passed, proceed writing snapshots")
-	detailRows, err := fetchVehicleKpiDetailSnapshot(timestamp)
+	mknRows, err := fetchVehicleKpiDetailSnapshot(timestamp)
 	if err != nil {
 		log.Printf("[ERROR] device acc job: fetch hourly vehicle detail snapshot from mongo: %v", err)
 		return
 	}
-	sampledHourUTC := sampledHourFromUTC(timestamp, resolveKpiLocation())
+	accOnRows, err := db.ListDeviceVehicleACCOnViolationRows(sampledHourUTC)
+	if err != nil {
+		log.Printf("[ERROR] device acc job: list ACC_ON vehicle detail rows from postgres state: %v", err)
+		return
+	}
+	accOffRows, err := db.ListDeviceVehicleACCOffViolationRows(sampledHourUTC)
+	if err != nil {
+		log.Printf("[ERROR] device acc job: list ACC_OFF vehicle detail rows from postgres state: %v", err)
+		return
+	}
+	detailRows := make([]model.DeviceKPIVehicleDetail, 0, len(accOnRows)+len(accOffRows)+len(mknRows))
+	detailRows = append(detailRows, accOnRows...)
+	detailRows = append(detailRows, accOffRows...)
+	detailRows = append(detailRows, mknRows...)
+	for i := range detailRows {
+		detailRows[i].SampledAt = timestamp
+		detailRows[i].SampledHour = sampledHourUTC
+	}
 	if err := db.UpsertDeviceKPIVehicleDetails(detailRows, timestamp, sampledHourUTC); err != nil {
 		log.Printf("[ERROR] device acc job: upsert device_kpi_vehicle_detail rows: %v", err)
 		return
@@ -568,10 +592,116 @@ type mongoVehicleDetailRow struct {
 	LastUpdateTS int64  `bson:"last_update_ts"`
 }
 
+type mongoVehicleACCStateRow struct {
+	PlateNo         string `bson:"plate_no"`
+	IMEI            string `bson:"imei"`
+	ACCValue        string `bson:"acc_value"`
+	ACCLastUpdateTS int64  `bson:"acc_last_update_ts"`
+}
+
 type mongoVehicleIdentityRow struct {
 	PlateNo string `bson:"plate_no"`
 	IMEI    string `bson:"imei"`
 	LastTS  int64  `bson:"last_ts"`
+}
+
+func fetchVehicleACCStateSnapshot(sampledAtUTC time.Time) ([]model.DeviceVehicleACCState, error) {
+	mongoDBName := config.Env(config.EnvAttrMongoDBName, config.DefAttrMongoDBName)
+	mongoHosts := config.Env(config.EnvAttrMongoHosts, config.DefAttrMongoHosts)
+	mongoPort := config.Env(config.EnvAttrMongoPort, config.DefAttrMongoPort)
+	mongoUser := config.Env(config.EnvAttrMongoUser, config.DefAttrMongoUser)
+	mongoPass := config.Env(config.EnvAttrMongoPass, config.DefAttrMongoPass)
+	mongoAuthSourceCfg := strings.TrimSpace(config.Env(config.EnvAttrMongoAuthDB, config.DefAttrMongoAuthDB))
+	mongoAuthMechCfg := strings.TrimSpace(config.Env(config.EnvAttrMongoAuthMech, config.DefAttrMongoAuthMech))
+
+	clientURI, err := buildMongoURI(mongoHosts, mongoPort)
+	if err != nil {
+		return nil, err
+	}
+
+	authSources := buildAuthSourceCandidates(mongoDBName, mongoAuthSourceCfg)
+	authMechs := buildAuthMechanismCandidates(mongoAuthMechCfg)
+	client, usedAuthSource, usedAuthMech, err := connectMongoWithFallback(clientURI, mongoUser, mongoPass, authSources, authMechs)
+	if err != nil {
+		return nil, fmt.Errorf("connect mongo with fallback auth: %w", err)
+	}
+	defer func() {
+		disconnectCtx, disconnectCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer disconnectCancel()
+		_ = client.Disconnect(disconnectCtx)
+	}()
+	log.Printf("[INFO] device acc job: connected mongo using authSource=%s authMechanism=%s", usedAuthSource, usedAuthMech)
+
+	coll := client.Database(mongoDBName).Collection("attributes")
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{
+			"entity_type":   "VEHICLE",
+			"plateNo.value": bson.M{"$exists": true, "$ne": ""},
+		}}},
+		{{Key: "$project", Value: bson.M{
+			"_id":                0,
+			"plate_no":           "$plateNo.value",
+			"imei":               bson.M{"$ifNull": []interface{}{"$imei.value", ""}},
+			"acc_value":          bson.M{"$ifNull": []interface{}{"$acc.value", ""}},
+			"acc_last_update_ts": bson.M{"$ifNull": []interface{}{"$acc.last_update_ts", 0}},
+		}}},
+		{{Key: "$sort", Value: bson.D{
+			{Key: "plate_no", Value: 1},
+			{Key: "acc_last_update_ts", Value: -1},
+		}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":                "$plate_no",
+			"imei":               bson.M{"$first": "$imei"},
+			"acc_value":          bson.M{"$first": "$acc_value"},
+			"acc_last_update_ts": bson.M{"$first": "$acc_last_update_ts"},
+		}}},
+		{{Key: "$project", Value: bson.M{
+			"_id":                0,
+			"plate_no":           "$_id",
+			"imei":               1,
+			"acc_value":          1,
+			"acc_last_update_ts": 1,
+		}}},
+	}
+
+	cursor, err := coll.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate ACC state snapshot from mongo: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	sampledAtUTC = sampledAtUTC.UTC()
+	rows := make([]model.DeviceVehicleACCState, 0)
+	for cursor.Next(ctx) {
+		var doc mongoVehicleACCStateRow
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("decode ACC state row: %w", err)
+		}
+
+		plate := strings.TrimSpace(doc.PlateNo)
+		if plate == "" || doc.ACCLastUpdateTS <= 0 {
+			continue
+		}
+		accValue := strings.ToLower(strings.TrimSpace(doc.ACCValue))
+		if accValue != "active" && accValue != "inactive" {
+			accValue = ""
+		}
+		rows = append(rows, model.DeviceVehicleACCState{
+			PlateNo:      plate,
+			IMEI:         strings.TrimSpace(doc.IMEI),
+			ACCValue:     accValue,
+			LastUpdateTS: doc.ACCLastUpdateTS,
+			LastUpdateAt: time.UnixMilli(doc.ACCLastUpdateTS).UTC(),
+		})
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("iterate ACC state rows: %w", err)
+	}
+
+	return rows, nil
 }
 
 func fetchVehicleKpiDetailSnapshot(sampledAtUTC time.Time) ([]model.DeviceKPIVehicleDetail, error) {
@@ -603,32 +733,17 @@ func fetchVehicleKpiDetailSnapshot(sampledAtUTC time.Time) ([]model.DeviceKPIVeh
 
 	sampledAtUTC = sampledAtUTC.UTC()
 	sampledHourUTC := sampledHourFromUTC(sampledAtUTC, resolveKpiLocation())
-	accOnThresholdTs := sampledAtUTC.Add(-10 * time.Hour).UnixMilli()
 	over72hThresholdTs := sampledAtUTC.Add(-72 * time.Hour).UnixMilli()
 
 	coll := client.Database(mongoDBName).Collection("attributes")
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	accOnRows, err := fetchVehicleDetailsByFieldCondition(ctx, coll, deviceKpiAccOnName, "acc", "active", accOnThresholdTs, sampledAtUTC, sampledHourUTC)
-	if err != nil {
-		return nil, err
-	}
-	accOffRows, err := fetchVehicleDetailsByFieldCondition(ctx, coll, deviceKpiAccOffName, "acc", "inactive", over72hThresholdTs, sampledAtUTC, sampledHourUTC)
-	if err != nil {
-		return nil, err
-	}
 	mknRows, err := fetchVehicleDetailsByFieldCondition(ctx, coll, deviceKpiVehicleMknName, "status", statusOffline, over72hThresholdTs, sampledAtUTC, sampledHourUTC)
 	if err != nil {
 		return nil, err
 	}
-
-	rows := make([]model.DeviceKPIVehicleDetail, 0, len(accOnRows)+len(accOffRows)+len(mknRows))
-	rows = append(rows, accOnRows...)
-	rows = append(rows, accOffRows...)
-	rows = append(rows, mknRows...)
-
-	return rows, nil
+	return mknRows, nil
 }
 
 func sampledHourFromUTC(sampledAtUTC time.Time, loc *time.Location) time.Time {
@@ -896,6 +1011,7 @@ func startOfKpiCycleMillis(nowLocal time.Time, resetDay int) int64 {
 
 func resolveKpiLocation() *time.Location {
 	tz := strings.TrimSpace(config.Env(config.EnvKpiTimezone, config.DefKpiTimezone))
+	tz = strings.Trim(tz, "\"'")
 	if tz == "" {
 		tz = config.DefKpiTimezone
 	}
