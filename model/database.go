@@ -119,11 +119,12 @@ var (
 	mainDB       *sql.DB
 	transDB      *sql.DB
 	devicesDB    *sql.DB
+	vtrackingDB  *sql.DB
 	attributesDB *sql.DB
 	mainSQLX     *sqlx.DB
 
-	mainOnce, transOnce, devicesOnce, attributesOnce             sync.Once
-	mainInitErr, transInitErr, devicesInitErr, attributesInitErr error
+	mainOnce, transOnce, devicesOnce, vtrackingOnce, attributesOnce                sync.Once
+	mainInitErr, transInitErr, devicesInitErr, vtrackingInitErr, attributesInitErr error
 )
 
 const (
@@ -259,6 +260,23 @@ func ConnectDevicesDB(cfg config.DBConfig) (*PostgreDb, error) {
 		return nil, devicesInitErr
 	}
 	return &PostgreDb{devicesDB}, nil
+}
+
+func ConnectVtrackingDB(cfg config.DBConfig) (*PostgreDb, error) {
+	url := fmt.Sprintf("host=%s port=%s user=%s dbname=%s password=%s sslmode=%s sslcert=%s sslkey=%s sslrootcert=%s", cfg.Host, cfg.Port, cfg.User, "vtracking", cfg.Pass, cfg.SSLMode, cfg.SSLCert, cfg.SSLKey, cfg.SSLRootcert)
+
+	vtrackingOnce.Do(func() {
+		var db *sql.DB
+		db, vtrackingInitErr = sql.Open("postgres", url)
+		if vtrackingInitErr == nil {
+			configurePool(db, cfg)
+			vtrackingDB = db
+		}
+	})
+	if vtrackingInitErr != nil {
+		return nil, vtrackingInitErr
+	}
+	return &PostgreDb{vtrackingDB}, nil
 }
 
 func ConnectAttributesDB(cfg config.DBConfig) (*PostgreDb, error) {
@@ -1993,6 +2011,9 @@ func CloseAllPools() {
 	}
 	if devicesDB != nil {
 		_ = devicesDB.Close()
+	}
+	if vtrackingDB != nil {
+		_ = vtrackingDB.Close()
 	}
 	if attributesDB != nil {
 		_ = attributesDB.Close()

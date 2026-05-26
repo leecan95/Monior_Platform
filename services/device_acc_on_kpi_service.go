@@ -18,19 +18,22 @@ import (
 )
 
 const (
-	deviceKpiAccOnName      = "ACC_ON_OVER_10H"
-	deviceKpiAccOffName     = "ACC_OFF_OVER_72H"
-	deviceKpiVehicleMknName = "VEHICLE_MKN_OVER_72H"
-	deviceKpiVehicleMknNow  = "VEHICLE_MKN_CURRENT"
-	deviceKpiVehicleBadGps  = "VEHICLE_BADGPS_OVER_ONLINE_IN_DAY"
-	deviceKpiBadWriteMemory = "BAD_WRITE_MEMORY"
-	deviceKpiAccOnCycle21   = "ACC_ON_OVER_10H_CYCLE_21"
-	deviceKpiAccOffCycle21  = "ACC_OFF_OVER_72H_CYCLE_21"
-	deviceKpiMknCycle21     = "VEHICLE_MKN_OVER_72H_CYCLE_21"
-	deviceDailyStatusCursor = "device_daily_status_plate_snapshot"
-	deviceDailyStatusReset  = "device_daily_status_day_reset"
-	deviceKpiInsertCursor   = "device_kpi_hourly_insert"
-	deviceKpiDetailDayReset = "device_kpi_vehicle_detail_day_reset"
+	deviceKpiAccOnName                 = "ACC_ON_OVER_10H"
+	deviceKpiAccOffName                = "ACC_OFF_OVER_72H"
+	deviceKpiVehicleMknName            = "VEHICLE_MKN_OVER_72H"
+	deviceKpiVehicleMknNow             = "VEHICLE_MKN_CURRENT"
+	deviceKpiVehicleBadGps             = "VEHICLE_BADGPS_OVER_ONLINE_IN_DAY"
+	deviceKpiBadWriteMemory            = "BAD_WRITE_MEMORY"
+	deviceKpiAccOnCycle21              = "ACC_ON_OVER_10H_CYCLE_21"
+	deviceKpiAccOffCycle21             = "ACC_OFF_OVER_72H_CYCLE_21"
+	deviceKpiMknCycle21                = "VEHICLE_MKN_OVER_72H_CYCLE_21"
+	deviceDailyStatusCursor            = "device_daily_status_plate_snapshot"
+	deviceDailyStatusReset             = "device_daily_status_day_reset"
+	deviceKpiInsertCursor              = "device_kpi_hourly_insert"
+	deviceKpiDetailDayReset            = "device_kpi_vehicle_detail_day_reset"
+	deviceOnlineCameraDailyCursor      = "device_online_camera_daily_sync_1h"
+	deviceImageStoreViolationCursor    = "device_image_store_violation_sync_10m"
+	deviceImageStoreDailySummaryCursor = "device_image_store_daily_summary_day_snapshot"
 
 	statusOffline = "offline"
 	statusBadGPS  = "badgps"
@@ -138,6 +141,19 @@ func runDeviceAccOnKpiSnapshot() {
 	}
 	log.Printf("[INFO] device acc job: daily counters mkn_current=%d badgps_in_day=%d badmem_in_day=%d online_in_day=%d",
 		matchedMknCurrent, matchedBadGps, matchedBadMemory, totalOnlineInDay)
+
+	if err := syncOnlineCameraDaily10m(db, cfg, timestamp); err != nil {
+		log.Printf("[ERROR] device acc job: sync device_kpi_online_camera_daily: %v", err)
+		return
+	}
+	if err := syncImageStoreViolationDaily10m(db, cfg, timestamp); err != nil {
+		log.Printf("[ERROR] device acc job: sync device_kpi_image_store_violation_daily: %v", err)
+		return
+	}
+	if err := snapshotImageStoreDailySummaryOnNewDay(db, timestamp); err != nil {
+		log.Printf("[ERROR] device acc job: snapshot device_kpi_image_store_daily_summary on day change: %v", err)
+		return
+	}
 
 	cycleAccOnMatched, cycleAccOffMatched, cycleMknMatched, cycleTotalVehicles, cycleStartTs, cycleErr := countDistinctVehicleKpiInCycle21Window()
 	if cycleErr != nil {
@@ -1088,6 +1104,191 @@ func markDeviceKpiSnapshotInserted(db *model.PostgreDb, insertedAtUTC time.Time)
 		return err
 	}
 	return db.UpsertDeviceKPIJobCursor(deviceKpiInsertCursor, insertedAtUTC.UnixMilli())
+}
+
+func shouldRunIntervalSnapshot(db *model.PostgreDb, cursorName string, nowUTC time.Time, interval time.Duration) (bool, time.Time, error) {
+	if err := db.EnsureDeviceKPIJobCursorTable(); err != nil {
+		return false, time.Time{}, err
+	}
+
+	cursor, err := db.GetDeviceKPIJobCursor(cursorName)
+	if err != nil {
+		return false, time.Time{}, err
+	}
+
+	if !cursor.Valid {
+		return true, nowUTC, nil
+	}
+
+	lastRunAt := time.UnixMilli(cursor.Int64).UTC()
+	nextAllowed := lastRunAt.Add(interval)
+	if !nowUTC.Before(nextAllowed) {
+		return true, nextAllowed, nil
+	}
+
+	return false, nextAllowed, nil
+}
+
+func syncOnlineCameraDaily10m(transDB *model.PostgreDb, cfg config.DBConfig, nowUTC time.Time) error {
+	if err := transDB.EnsureDeviceKPIOnlineCameraDailyTable(); err != nil {
+		return fmt.Errorf("ensure table: %w", err)
+	}
+
+	canRun, nextAllowed, err := shouldRunIntervalSnapshot(transDB, deviceOnlineCameraDailyCursor, nowUTC.UTC(), time.Hour)
+	if err != nil {
+		return fmt.Errorf("interval gate: %w", err)
+	}
+	if !canRun {
+		log.Printf("[INFO] device acc job: skip device_kpi_online_camera_daily (next at %s)", nextAllowed.UTC().Format(time.RFC3339))
+		return nil
+	}
+
+	kpiDate := nowUTC.UTC().In(resolveKpiLocation()).Format("2006-01-02")
+	onlineVehicles, err := transDB.ListDeviceKPIDailySeenOnlineVehicles(kpiDate)
+	if err != nil {
+		return fmt.Errorf("list seen_online vehicles by date=%s: %w", kpiDate, err)
+	}
+
+	plates := make([]string, 0, len(onlineVehicles))
+	imeiByPlate := make(map[string]string, len(onlineVehicles))
+	for _, vehicle := range onlineVehicles {
+		plate := strings.TrimSpace(vehicle.PlateNo)
+		if plate == "" {
+			continue
+		}
+		plates = append(plates, plate)
+		imeiByPlate[plate] = strings.TrimSpace(vehicle.IMEI)
+	}
+
+	devicesDB, err := model.ConnectDevicesDB(cfg)
+	if err != nil {
+		return fmt.Errorf("connect devices db: %w", err)
+	}
+
+	cameraRefs, err := devicesDB.ListVehicleCameraRefsByLicensePlates(plates)
+	if err != nil {
+		return fmt.Errorf("query devices.mv_vehicle_camera: %w", err)
+	}
+
+	rows := make([]model.DeviceKPIOnlineCameraDailyRow, 0, len(cameraRefs))
+	for plate, ref := range cameraRefs {
+		if strings.TrimSpace(plate) == "" {
+			continue
+		}
+		rows = append(rows, model.DeviceKPIOnlineCameraDailyRow{
+			KPIDate:         kpiDate,
+			PlateNo:         plate,
+			LicensePlate:    ref.LicensePlate,
+			IMEI:            imeiByPlate[plate],
+			DeviceModelName: ref.DeviceModelName,
+		})
+	}
+
+	if err := transDB.ReplaceDeviceKPIOnlineCameraDailyByDate(kpiDate, rows); err != nil {
+		return fmt.Errorf("replace rows by kpi_date=%s: %w", kpiDate, err)
+	}
+	if err := transDB.UpsertDeviceKPIJobCursor(deviceOnlineCameraDailyCursor, nowUTC.UTC().UnixMilli()); err != nil {
+		return fmt.Errorf("update cursor: %w", err)
+	}
+
+	log.Printf("[INFO] device acc job: synced device_kpi_online_camera_daily kpi_date=%s rows=%d", kpiDate, len(rows))
+	return nil
+}
+
+func syncImageStoreViolationDaily10m(transDB *model.PostgreDb, cfg config.DBConfig, nowUTC time.Time) error {
+	if err := transDB.EnsureDeviceKPIImageStoreViolationDailyTable(); err != nil {
+		return fmt.Errorf("ensure table: %w", err)
+	}
+
+	canRun, nextAllowed, err := shouldRunIntervalSnapshot(transDB, deviceImageStoreViolationCursor, nowUTC.UTC(), 10*time.Minute)
+	if err != nil {
+		return fmt.Errorf("interval gate: %w", err)
+	}
+	if !canRun {
+		log.Printf("[INFO] device acc job: skip device_kpi_image_store_violation_daily (next at %s)", nextAllowed.UTC().Format(time.RFC3339))
+		return nil
+	}
+
+	kpiDate := nowUTC.UTC().In(resolveKpiLocation()).Format("2006-01-02")
+	vtrackingDB, err := model.ConnectVtrackingDB(cfg)
+	if err != nil {
+		return fmt.Errorf("connect vtracking db: %w", err)
+	}
+
+	violationRows, err := vtrackingDB.ListMVVehicleViolationRowsByDate(kpiDate)
+	if err != nil {
+		return fmt.Errorf("query vtracking.mv_vehicle_violation_full by kpi_date=%s: %w", kpiDate, err)
+	}
+
+	if err := transDB.ReplaceDeviceKPIImageStoreViolationDailyByDate(kpiDate, violationRows); err != nil {
+		return fmt.Errorf("replace rows by kpi_date=%s: %w", kpiDate, err)
+	}
+	if err := transDB.UpsertDeviceKPIJobCursor(deviceImageStoreViolationCursor, nowUTC.UTC().UnixMilli()); err != nil {
+		return fmt.Errorf("update cursor: %w", err)
+	}
+
+	log.Printf("[INFO] device acc job: synced device_kpi_image_store_violation_daily kpi_date=%s rows=%d", kpiDate, len(violationRows))
+	return nil
+}
+
+func snapshotImageStoreDailySummaryOnNewDay(transDB *model.PostgreDb, nowUTC time.Time) error {
+	if err := transDB.EnsureDeviceKPIJobCursorTable(); err != nil {
+		return fmt.Errorf("ensure cursor table: %w", err)
+	}
+	if err := transDB.EnsureDeviceKPIImageStoreDailySummaryTable(); err != nil {
+		return fmt.Errorf("ensure summary table: %w", err)
+	}
+	if err := transDB.EnsureDeviceKPIOnlineCameraDailyTable(); err != nil {
+		return fmt.Errorf("ensure online-camera table: %w", err)
+	}
+	if err := transDB.EnsureDeviceKPIImageStoreViolationDailyTable(); err != nil {
+		return fmt.Errorf("ensure image-store violation table: %w", err)
+	}
+
+	loc := resolveKpiLocation()
+	nowLocal := nowUTC.UTC().In(loc)
+	dayStartLocal := time.Date(nowLocal.Year(), nowLocal.Month(), nowLocal.Day(), 0, 0, 0, 0, loc)
+	dayStartUTC := dayStartLocal.UTC()
+
+	cursor, err := transDB.GetDeviceKPIJobCursor(deviceImageStoreDailySummaryCursor)
+	if err != nil {
+		return fmt.Errorf("get summary day cursor: %w", err)
+	}
+	if cursor.Valid && cursor.Int64 >= dayStartUTC.UnixMilli() {
+		return nil
+	}
+
+	summaryDate := dayStartLocal.AddDate(0, 0, -1).Format("2006-01-02")
+	onlineCount, err := transDB.CountDistinctOnlineCameraVehiclesByDate(summaryDate)
+	if err != nil {
+		return fmt.Errorf("count online camera vehicles date=%s: %w", summaryDate, err)
+	}
+	violationCount, err := transDB.CountDistinctImageStoreViolationVehiclesByDate(summaryDate)
+	if err != nil {
+		return fmt.Errorf("count image-store violations date=%s: %w", summaryDate, err)
+	}
+
+	violationPercent := 0.0
+	if onlineCount > 0 {
+		violationPercent = float64(violationCount) * 100 / float64(onlineCount)
+	}
+
+	if err := transDB.UpsertDeviceKPIImageStoreDailySummary(model.DeviceKPIImageStoreDailySummary{
+		SummaryDate:          summaryDate,
+		OnlineDeviceCount:    onlineCount,
+		ViolationDeviceCount: violationCount,
+		ViolationPercent:     violationPercent,
+	}); err != nil {
+		return fmt.Errorf("upsert daily summary for date=%s: %w", summaryDate, err)
+	}
+
+	if err := transDB.UpsertDeviceKPIJobCursor(deviceImageStoreDailySummaryCursor, dayStartUTC.UnixMilli()); err != nil {
+		return fmt.Errorf("update summary day cursor: %w", err)
+	}
+
+	log.Printf("[INFO] device acc job: snapshotted device_kpi_image_store_daily_summary summary_date=%s online=%d violations=%d percent=%.2f",
+		summaryDate, onlineCount, violationCount, violationPercent)
+	return nil
 }
 
 func buildIncrementalTimeRange(startTs, endTs int64, inclusiveStart bool) bson.M {
