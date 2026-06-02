@@ -101,6 +101,12 @@ func SetupRouter() *gin.Engine {
 		services.IncHttpRequest(c)
 		c.Next()
 	})
+	route.GET("/health", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
+	route.GET("/ready", func(c *gin.Context) {
+		c.Status(http.StatusOK)
+	})
 	//route.Use(func(c *gin.Context) {
 	//	// Đưa connection pool vào context của request
 	//	c.Set("dbpool", db)
